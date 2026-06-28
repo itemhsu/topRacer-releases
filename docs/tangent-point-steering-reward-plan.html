@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>切點行為獎勵 — TDD 實作計畫</title>
+<style>:root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;--blue:#1f77b4;--red:#d62728;--green:#2ca02c;--amber:#e0a000;--line:#2a2f3a;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:20px;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:#fff}
+.sub{color:var(--muted);margin:0 0 8px}
+code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff;font-family:"SF Mono",Menlo,Consolas,monospace}
+pre{background:#0c0e13;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.5;font-family:"SF Mono",Menlo,Consolas,monospace}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}th{background:#1d212a;color:#fff}
+.fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0;text-align:center}.fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 20px 18px;margin:16px 0}
+.tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+.note{border-left:3px solid var(--accent);padding:8px 14px;background:#15121d;border-radius:0 8px 8px 0;margin:12px 0}
+.warn{border-left:3px solid var(--amber);background:#1c1708}
+.badge{display:inline-block;min-width:30px;text-align:center;font-weight:bold;color:#0c0e13;border-radius:7px;padding:2px 9px;margin-right:8px;font-size:14px}
+.lbl{display:inline-block;font-size:11px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:14px 0 4px}
+.run{color:#9aa4b2;font-size:13px;margin:6px 0}
+.ok{color:var(--green)}.bad{color:var(--red)}
+ul{margin:6px 0 6px 0;padding-left:20px}li{margin:3px 0}
+svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",monospace}</style></head><body><div class="wrap">
+
+<h1>切點行為獎勵 · TDD 實作計畫</h1>
+<p class="sub">topRacer 獎勵函數實作計畫書 · 2026-06-28 · 7 個任務、紅→綠→提交</p>
+<p><span class="tag">單檔 reward</span><span class="tag">純標準庫</span><span class="tag">TDD</span>
+<span class="tag">7 任務</span><span class="tag">通用（不綁賽道）</span></p>
+
+<div class="note">
+<b>目標：</b>新增一個與賽道無關的 DeepRacer 獎勵 <code>reward_functions/Tangent Apex.py</code>，
+只有在<b>轉向指令是把車頭轉回下一彎切點（apex 側）的正確修正動作</b>時給 1.0，否則 0.0。<br>
+<b>對應規格：</b><a href="https://itemhsu.github.io/topRacer-releases/tangent-point-steering-reward.html" style="color:#a06cff">切點行為獎勵設計規格書</a>
+（§ 編號在下方覆蓋表對得起來）。
+</div>
+
+<h2>架構與資料流</h2>
+<p>單一檔案，模組級<b>純函式</b>＋ <code>reward_function(params)</code>。邊界由<b>中線＋道寬</b>即時推導（不烤座標）；
+四張彎道表第一次呼叫時算一次並快取在模組全域。每步的資料流如下：</p>
+<figure class="fig"><svg viewBox="0 0 720 486" width="100%" style="max-width:720px">
+<defs><marker id="ar" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs>
+<rect x="120" y="20" width="486" height="52" rx="9" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="136" y="42" font-size="14" fill="#e6e6e6" font-family="monospace">params（每步輸入）</text><text x="136" y="61" font-size="12" fill="#9aa4b2">x · y · heading · steering_angle · waypoints · track_width · closest_waypoints</text>
+<rect x="120" y="86" width="486" height="52" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><circle cx="98" cy="112" r="15" fill="#171a21" stroke="#1f77b4" stroke-width="1.5"/><text x="98" y="116" text-anchor="middle" font-size="12" fill="#1f77b4" font-weight="bold">T2</text><text x="136" y="108" font-size="14" fill="#e6e6e6" font-family="monospace">build_cache(waypoints, track_width)</text><text x="136" y="127" font-size="12" fill="#9aa4b2">→ {left, right, entries, corners, apex} ·〈第一次呼叫算一次並快取〉</text><line x1="363.0" y1="74" x2="363.0" y2="85" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="120" y="152" width="486" height="52" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><circle cx="98" cy="178" r="15" fill="#171a21" stroke="#1f77b4" stroke-width="1.5"/><text x="98" y="182" text-anchor="middle" font-size="12" fill="#1f77b4" font-weight="bold">T3</text><text x="136" y="174" font-size="14" fill="#e6e6e6" font-family="monospace">next_corner(nxt, corners)</text><text x="136" y="193" font-size="12" fill="#9aa4b2">→ corner (s,e,d)　｜　None → 直行（reward_for(0, steering)）</text><line x1="363.0" y1="140" x2="363.0" y2="151" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="120" y="218" width="486" height="52" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><circle cx="98" cy="244" r="15" fill="#171a21" stroke="#1f77b4" stroke-width="1.5"/><text x="98" y="248" text-anchor="middle" font-size="12" fill="#1f77b4" font-weight="bold">T3</text><text x="136" y="240" font-size="14" fill="#e6e6e6" font-family="monospace">apex_polyline(corner, apex)</text><text x="136" y="259" font-size="12" fill="#9aa4b2">→ B：該彎 apex 內側折線</text><line x1="363.0" y1="206" x2="363.0" y2="217" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="120" y="284" width="486" height="52" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><circle cx="98" cy="310" r="15" fill="#171a21" stroke="#2ca02c" stroke-width="1.5"/><text x="98" y="314" text-anchor="middle" font-size="12" fill="#2ca02c" font-weight="bold">T4</text><text x="136" y="306" font-size="14" fill="#e6e6e6" font-family="monospace">tangent_point(P, B, left?)</text><text x="136" y="325" font-size="12" fill="#9aa4b2">→ T：支撐切點（整段 B 同側）</text><line x1="363.0" y1="272" x2="363.0" y2="283" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="120" y="350" width="486" height="52" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><circle cx="98" cy="376" r="15" fill="#171a21" stroke="#2ca02c" stroke-width="1.5"/><text x="98" y="380" text-anchor="middle" font-size="12" fill="#2ca02c" font-weight="bold">T5</text><text x="136" y="372" font-size="14" fill="#e6e6e6" font-family="monospace">e = normalize_deg( bearing(P,T) − heading )</text><text x="136" y="391" font-size="12" fill="#9aa4b2">→ e：對準誤差（+＝切點在車頭左方）</text><line x1="363.0" y1="338" x2="363.0" y2="349" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+<rect x="120" y="416" width="486" height="52" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.5"/><circle cx="98" cy="442" r="15" fill="#171a21" stroke="#e0a000" stroke-width="1.5"/><text x="98" y="446" text-anchor="middle" font-size="12" fill="#e0a000" font-weight="bold">T6</text><text x="136" y="438" font-size="14" fill="#e6e6e6" font-family="monospace">reward_for(e, steering)</text><text x="136" y="457" font-size="12" fill="#9aa4b2">→ 1.0（轉向修正正確）/ 0.0</text><line x1="363.0" y1="404" x2="363.0" y2="415" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#ar)"/>
+</svg>
+<figcaption>圖 A — 每步資料流：params →（快取）build_cache → next_corner → apex_polyline → tangent_point → e → reward_for → 0/1。徽章標出由哪個任務實作。</figcaption></figure>
+
+<h2>任務相依</h2>
+<figure class="fig"><svg viewBox="0 0 720 250" width="100%" style="max-width:720px">
+<defs><marker id="ad" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs>
+<rect x="30" y="40" width="150" height="46" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><text x="105.0" y="59" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">T1</text><text x="105.0" y="76" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">turn3 / bends</text>
+<rect x="210" y="40" width="150" height="46" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><text x="285.0" y="59" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">T2</text><text x="285.0" y="76" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">build_cache</text>
+<rect x="390" y="40" width="150" height="46" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><text x="465.0" y="59" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">T3</text><text x="465.0" y="76" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">next_corner</text>
+<rect x="30" y="150" width="150" height="46" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="105.0" y="169" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">T4</text><text x="105.0" y="186" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">tangent_point</text>
+<rect x="210" y="150" width="150" height="46" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="285.0" y="169" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">T5</text><text x="285.0" y="186" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">normalize/bearing</text>
+<rect x="390" y="150" width="150" height="46" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.5"/><text x="465.0" y="169" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">T6</text><text x="465.0" y="186" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">reward_for</text>
+<rect x="560" y="95" width="150" height="46" rx="9" fill="#11141b" stroke="#a06cff" stroke-width="1.5"/><text x="635.0" y="114" text-anchor="middle" font-size="13" fill="#a06cff" font-weight="bold">T7</text><text x="635.0" y="131" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">reward_function</text>
+<line x1="180" y1="63" x2="210" y2="63" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ad)"/>
+<line x1="360" y1="63" x2="390" y2="63" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ad)"/>
+<line x1="540" y1="63" x2="560" y2="108" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ad)"/>
+<line x1="180" y1="173" x2="560" y2="128" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ad)"/>
+<line x1="360" y1="168" x2="560" y2="120" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ad)"/>
+<line x1="540" y1="173" x2="560" y2="135" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ad)"/>
+<text x="30" y="225" font-size="11.5" fill="#9aa4b2">藍：依序建立的快取管線　·　綠：純幾何/數值小工具　·　黃：二元判定　·　紫：整合進入點</text>
+</svg>
+<figcaption>圖 B — 任務相依。藍：依序建立的快取管線（T1→T2→T3）；綠：純小工具（T4/T5）；黃：二元判定（T6）；紫：整合（T7）匯入全部。</figcaption></figure>
+
+<h2>每個任務的節奏</h2>
+<figure class="fig"><svg viewBox="0 0 460 180" width="100%" style="max-width:460px">
+<defs><marker id="at" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs>
+<rect x="20" y="60" width="120" height="46" rx="9" fill="#1c1010" stroke="#d62728" stroke-width="1.5"/>
+<text x="80" y="80" text-anchor="middle" font-size="13" fill="#d62728" font-weight="bold">1 寫失敗測試</text>
+<text x="80" y="97" text-anchor="middle" font-size="11" fill="#9aa4b2">跑→確定 FAIL</text>
+<rect x="170" y="60" width="120" height="46" rx="9" fill="#0f1c10" stroke="#2ca02c" stroke-width="1.5"/>
+<text x="230" y="80" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">2 最小實作</text>
+<text x="230" y="97" text-anchor="middle" font-size="11" fill="#9aa4b2">跑→確定 PASS</text>
+<rect x="320" y="60" width="120" height="46" rx="9" fill="#10141c" stroke="#1f77b4" stroke-width="1.5"/>
+<text x="380" y="80" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">3 提交</text>
+<text x="380" y="97" text-anchor="middle" font-size="11" fill="#9aa4b2">git commit</text>
+<line x1="140" y1="83" x2="168" y2="83" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#at)"/>
+<line x1="290" y1="83" x2="318" y2="83" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#at)"/>
+<path d="M380,108 C380,150 80,150 80,108" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#at)"/>
+<text x="230" y="168" text-anchor="middle" font-size="11.5" fill="#9aa4b2">下一個函式 · 每個任務一輪</text>
+</svg>
+<figcaption>圖 C — 每個任務一輪 TDD：先寫會失敗的測試 → 跑到 FAIL → 寫最小實作 → 跑到 PASS → 提交。</figcaption></figure>
+
+<h2>全域限制（每個任務都適用）</h2>
+<ul>
+<li>只新增一個檔 <code>reward_functions/Tangent Apex.py</code>（檔名含空格，由 <code>list_reward_functions</code> 自動掃描）。只用標準庫 <code>math</code>，不用 numpy、不 import 專案模組。</li>
+<li>必須通過 <code>topracer.reward.verify.verify_reward_source</code>：能編譯、定義 <code>reward_function(params)</code>、在 <code>SAMPLE_PARAMS</code> 上回傳數字。<code>SAMPLE_PARAMS["waypoints"]</code> 只有兩點（無彎），所以「無彎」路徑要回傳數字。</li>
+<li>常數固定：<code>TOL_ALIGN=6.0 · TOL_STRAIGHT=3.0 · EPS=0.15</code>；獎勵值就是 <code>1.0 / 0.0</code>。</li>
+<li>DeepRacer 慣例：<code>steering_angle</code> 正＝左、負＝右；<code>e = normalize_deg(bearing(P,T) − heading)</code>，<code>e&gt;0</code> 表切點在車頭左方。</li>
+<li>apex 側＝彎內側：左彎 <code>center + half·nL</code>、右彎 <code>center − half·nL</code>，<code>half = track_width/2</code>。</li>
+<li>測試都在 <code>tests/reward/test_tangent_apex.py</code>；用 <code>importlib</code> 依路徑載入含空格檔名；端到端測試前先 <code>m._CACHE = None</code>。讀真實賽道的測試以 <code>skipif</code> 保護。實測 2018＝<b>5 個彎</b> <code>(22,42,L)(51,56,R)(66,70,L)(80,90,L)(104,110,L)</code>。</li>
+<li>整輪測試：<code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code>。</li>
+</ul>
+
+<h2>任務（逐一 TDD）</h2>
+<div class="card">
+<h2><span class="badge" style="background:#1f77b4">T1</span>曲率、彎道分類、彎道入口</h2>
+<div class="lbl">檔案</div><ul><li>建立 <code>reward_functions/Tangent Apex.py</code></li><li>建立 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b>（無）</li><li><b>Produces：</b><ul><li><code>turn3(a,b,c)</code> → 有號曲率（左/CCW &gt; 0）</li><li><code>classify_bends(wp,n,eps=EPS)</code> → (左彎集合, 右彎集合)</li><li><code>find_entries(bend,n)</code> → 入口索引 list</li><li>常數 <code>TOL_ALIGN=6.0 · TOL_STRAIGHT=3.0 · EPS=0.15</code>、全域 <code>_CACHE=None</code></li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>import os
+import importlib.util
+
+import pytest
+
+_REWARD = os.path.join(os.path.dirname(__file__), "..", "..",
+                       "reward_functions", "Tangent Apex.py")
+_NEEDS_TRACK = pytest.mark.skipif(
+    not os.path.exists("config/tracks/reinvent_base.npy"),
+    reason="2018 track not downloaded")
+
+
+def load():
+    """Load the space-named reward file by path (mirrors reward.loader)."""
+    spec = importlib.util.spec_from_file_location("tangent_apex", _REWARD)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_turn3_sign():
+    m = load()
+    assert m.turn3((0, 0), (1, 0), (2, 1)) &gt; 0      # left / CCW
+    assert m.turn3((0, 0), (1, 0), (2, -1)) &lt; 0     # right / CW
+    assert abs(m.turn3((0, 0), (1, 0), (2, 0))) &lt; 1e-9
+
+
+@_NEEDS_TRACK
+def test_classify_and_entries_on_2018():
+    import numpy as np
+    m = load()
+    wp = [(float(x), float(y))
+          for x, y in np.load("config/tracks/reinvent_base.npy")[:, 0:2]]
+    n = len(wp)
+    left, right = m.classify_bends(wp, n)
+    assert len(left) &gt; 0 and len(right) &gt; 0
+    assert len(m.find_entries(left | right, n)) == 5   # 5 corners (spec anchor)</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：FileNotFoundError / import error（reward 檔還不存在）</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>"""切點行為獎勵 (Tangent-Point Steering Reward)."""
+import math
+
+TOL_ALIGN = 6.0       # deg: |e| &lt;= this =&gt; aligned (should go straight)
+TOL_STRAIGHT = 3.0    # deg: |steering| &lt;= this =&gt; "straight" (not turning)
+EPS = 0.15            # turn3 curvature threshold for bend detection
+
+_CACHE = None         # built once on first call (centreline is static)
+
+
+def turn3(a, b, c):
+    """Signed, length-normalised curvature at b (left &gt; 0)."""
+    v1x, v1y = b[0] - a[0], b[1] - a[1]
+    v2x, v2y = c[0] - b[0], c[1] - b[1]
+    cross = v1x * v2y - v1y * v2x
+    scale = (math.hypot(v1x, v1y) * math.hypot(v2x, v2y)) or 1.0
+    return cross / scale
+
+
+def classify_bends(wp, n, eps=EPS):
+    """Return (left, right) index sets by signed curvature over the loop."""
+    left, right = set(), set()
+    for i in range(n):
+        t = turn3(wp[(i - 2) % n], wp[i % n], wp[(i + 2) % n])
+        if t &gt; eps:
+            left.add(i)
+        elif t &lt; -eps:
+            right.add(i)
+    return left, right
+
+
+def find_entries(bend, n):
+    """Corner entry indices: in a bend, previous index not in a bend."""
+    return [i for i in range(n) if i in bend and (i - 1) % n not in bend]</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：3 個測試通過（2018 測試通過或 skip）</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: turn3 + bend classification + corner entries"</pre>
+</div>
+<div class="card">
+<h2><span class="badge" style="background:#1f77b4">T2</span>左法線、彎段、邊界偏移快取</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex.py</code></li><li>修改 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b><code>classify_bends · find_entries</code>（任務 1）</li><li><b>Produces：</b><ul><li><code>left_normal(wp,i,n)</code> → 單位左法線</li><li><code>corners_from(left,right,n)</code> → [(start,end,'L'|'R')]（不跨起點縫）</li><li><code>build_cache(waypoints,track_width,eps=EPS)</code> → dict：<code>left/right/entries/corners/apex/n</code></li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>def test_left_normal_on_straight():
+    m = load()
+    nx, ny = m.left_normal([(0, 0), (1, 0), (2, 0)], 1, 3)
+    assert abs(nx) &lt; 1e-9 and abs(ny - 1.0) &lt; 1e-9   # +x travel -&gt; left = +y
+
+
+def test_corners_from_groups_runs():
+    m = load()
+    assert m.corners_from({2, 3, 4}, {10, 11}, 20) == [(2, 4, "L"), (10, 11, "R")]
+
+
+@_NEEDS_TRACK
+def test_build_cache_on_2018():
+    import numpy as np
+    m = load()
+    wp = [(float(x), float(y))
+          for x, y in np.load("config/tracks/reinvent_base.npy")[:, 0:2]]
+    c = m.build_cache(wp, 0.762)
+    assert [d for _, _, d in c["corners"]] == ["L", "R", "L", "L", "L"]
+    for s, e, _ in c["corners"]:
+        for i in range(s, e + 1):
+            assert i in c["apex"]
+    s0 = c["corners"][0][0]
+    ax, ay = c["apex"][s0]
+    nx, ny = m.left_normal(wp, s0, len(wp))
+    assert (ax - wp[s0][0]) * nx + (ay - wp[s0][1]) * ny &gt; 0   # apex on +nL side</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: module has no attribute 'left_normal'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>def left_normal(wp, i, n):
+    """Unit left normal of the local travel direction at index i (closed loop)."""
+    tx = wp[(i + 1) % n][0] - wp[(i - 1) % n][0]
+    ty = wp[(i + 1) % n][1] - wp[(i - 1) % n][1]
+    L = math.hypot(tx, ty) or 1.0
+    return (-ty / L, tx / L)
+
+
+def corners_from(left, right, n):
+    """Group consecutive same-direction bend indices into (start, end, dir)."""
+    cls = ['L' if i in left else ('R' if i in right else '.') for i in range(n)]
+    segs, i = [], 0
+    while i &lt; n:
+        if cls[i] in 'LR':
+            d = cls[i]
+            j = i
+            while j &lt; n and cls[j] == d:
+                j += 1
+            segs.append((i, j - 1, d))
+            i = j
+        else:
+            i += 1
+    return segs
+
+
+def build_cache(waypoints, track_width, eps=EPS):
+    """Four tables once: bend sets, entries, corner segments, apex-side points."""
+    wp = [(float(x), float(y)) for x, y in waypoints]
+    n = len(wp)
+    left, right = classify_bends(wp, n, eps)
+    entries = find_entries(left | right, n)
+    corners = corners_from(left, right, n)
+    half = float(track_width) / 2.0
+    apex = {}
+    for s, e, d in corners:
+        for i in range(s, e + 1):
+            nx, ny = left_normal(wp, i, n)
+            sgn = 1.0 if d == 'L' else -1.0       # apex = inside of the turn
+            apex[i] = (wp[i][0] + sgn * half * nx, wp[i][1] + sgn * half * ny)
+    return {"left": left, "right": right, "entries": entries,
+            "corners": corners, "apex": apex, "n": n}</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：新測試通過（2018 測試通過或 skip）</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: left-normal + corner segments + boundary-offset cache"</pre>
+</div>
+<div class="card">
+<h2><span class="badge" style="background:#1f77b4">T3</span>下一個彎 + apex 折線</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex.py</code></li><li>修改 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b><code>build_cache</code> 輸出結構（任務 2）</li><li><b>Produces：</b><ul><li><code>next_corner(next_idx,corners,n)</code> → 含/最近的彎 (s,e,d)，空則 None（環狀）</li><li><code>apex_polyline(corner,apex,n)</code> → apex 內側點 list（依序）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>def test_next_corner_lookup():
+    m = load()
+    corners = [(2, 4, "L"), (10, 12, "R")]
+    assert m.next_corner(0, corners, 20) == (2, 4, "L")    # nearest ahead
+    assert m.next_corner(3, corners, 20) == (2, 4, "L")    # inside corner 1
+    assert m.next_corner(6, corners, 20) == (10, 12, "R")  # corner 2 closer
+    assert m.next_corner(15, corners, 20) == (2, 4, "L")   # wraps the seam
+    assert m.next_corner(5, [], 20) is None
+
+
+def test_apex_polyline_in_order():
+    m = load()
+    apex = {2: (2.0, 9.0), 3: (3.0, 9.0), 4: (4.0, 9.0)}
+    assert m.apex_polyline((2, 4, "L"), apex, 20) == [(2.0, 9.0), (3.0, 9.0), (4.0, 9.0)]</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'next_corner'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>def next_corner(next_idx, corners, n):
+    """The corner containing next_idx, else the nearest ahead; None if empty."""
+    if not corners:
+        return None
+    best, best_gap = None, None
+    for (s, e, d) in corners:
+        within = s &lt;= next_idx &lt;= e
+        gap = 0 if within else (s - next_idx) % n
+        if best_gap is None or gap &lt; best_gap:
+            best_gap, best = gap, (s, e, d)
+    return best
+
+
+def apex_polyline(corner, apex, n):
+    """The apex-side points along a corner segment, in index order."""
+    s, e, _ = corner
+    return [apex[i] for i in range(s, e + 1)]</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: next-corner lookup + apex polyline"</pre>
+</div>
+<div class="card">
+<h2><span class="badge" style="background:#2ca02c">T4</span>支撐切點</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex.py</code></li><li>修改 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b>（純幾何，無相依）</li><li><b>Produces：</b><ul><li><code>cross(p,a,b)</code> → (a-p)×(b-p)；&gt;0 表 b 在射線 p→a 左側</li><li><code>tangent_point(P,B,left_turn)</code> → 支撐切點（整段 B 同側）；退化取中點</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>def test_cross_sign():
+    m = load()
+    assert m.cross((0, 0), (1, 0), (1, 1)) &gt; 0     # b left of ray -&gt;a
+    assert m.cross((0, 0), (1, 0), (1, -1)) &lt; 0    # b right of ray -&gt;a
+
+
+def test_tangent_point_is_a_supporting_point():
+    m = load()
+    B = [(0.0, 0.0), (1.0, 0.6), (2.0, 0.9), (3.0, 0.9), (4.0, 0.6), (5.0, 0.0)]
+    P = (2.5, -4.0)                                  # external point below the arc
+    T = m.tangent_point(P, B, True)                 # left: all others to the left
+    assert all(m.cross(P, T, o) &gt;= -1e-9 for o in B if o != T)
+    T2 = m.tangent_point(P, B, False)               # right: all others to the right
+    assert all(m.cross(P, T2, o) &lt;= 1e-9 for o in B if o != T2)
+    assert T != T2</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'cross'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>def cross(p, a, b):
+    """(a-p) x (b-p): &gt; 0 means b is to the left of the ray p-&gt;a."""
+    return (a[0] - p[0]) * (b[1] - p[1]) - (a[1] - p[1]) * (b[0] - p[0])
+
+
+def tangent_point(P, B, left_turn):
+    """Supporting point of polyline B seen from P: the whole of B lies on one
+    side of the sight-line P-&gt;point. Left turn -&gt; 'all others left' extreme."""
+    for cand in B:
+        ok = all((cross(P, cand, o) &gt;= 0) == left_turn
+                 for o in B if o is not cand)
+        if ok:
+            return cand
+    return B[len(B) // 2]      # degenerate (collinear/noisy) -&gt; midpoint</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: supporting tangent point (cross-product)"</pre>
+</div>
+<div class="card">
+<h2><span class="badge" style="background:#2ca02c">T5</span>角度小工具（normalize、bearing）</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex.py</code></li><li>修改 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b>（無）</li><li><b>Produces：</b><ul><li><code>normalize_deg(a)</code> → 收斂到 (-180, 180]</li><li><code>bearing(P,T)</code> → degrees(atan2(dy, dx))</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>def test_normalize_deg():
+    m = load()
+    assert abs(m.normalize_deg(190) - (-170)) &lt; 1e-9
+    assert abs(m.normalize_deg(-190) - 170) &lt; 1e-9
+    assert abs(m.normalize_deg(0)) &lt; 1e-9
+    assert abs(m.normalize_deg(360)) &lt; 1e-9
+    assert abs(m.normalize_deg(180) - 180) &lt; 1e-9     # boundary stays at +180
+    assert abs(m.normalize_deg(-180) - 180) &lt; 1e-9
+
+
+def test_bearing():
+    m = load()
+    assert abs(m.bearing((0, 0), (1, 0))) &lt; 1e-9
+    assert abs(m.bearing((0, 0), (0, 1)) - 90) &lt; 1e-9
+    assert abs(m.bearing((0, 0), (-1, 0)) - 180) &lt; 1e-9
+    assert abs(m.bearing((0, 0), (0, -1)) - (-90)) &lt; 1e-9</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'normalize_deg'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>def normalize_deg(a):
+    """Wrap an angle in degrees to the half-open range (-180, 180]."""
+    a = (a + 180.0) % 360.0 - 180.0
+    return a + 360.0 if a &lt;= -180.0 else a
+
+
+def bearing(P, T):
+    """Bearing from P to T in degrees (same frame as DeepRacer heading)."""
+    return math.degrees(math.atan2(T[1] - P[1], T[0] - P[0]))</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: normalize_deg + bearing"</pre>
+</div>
+<div class="card">
+<h2><span class="badge" style="background:#e0a000">T6</span>二元獎勵規則</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex.py</code></li><li>修改 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b><code>TOL_ALIGN · TOL_STRAIGHT</code>（任務 1）</li><li><b>Produces：</b><ul><li><code>reward_for(e,steering,tol_align=TOL_ALIGN,tol_straight=TOL_STRAIGHT)</code> → 1.0/0.0（規格 §5 表）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>def test_reward_for_left_required():
+    m = load()
+    assert m.reward_for(15, 12) == 1.0     # nose right of T, steering left
+    assert m.reward_for(15, -12) == 0.0    # wrong way
+    assert m.reward_for(15, 0) == 0.0      # not correcting
+
+
+def test_reward_for_right_required():
+    m = load()
+    assert m.reward_for(-15, -12) == 1.0
+    assert m.reward_for(-15, 2) == 0.0
+
+
+def test_reward_for_straight_required():
+    m = load()
+    assert m.reward_for(0, 0) == 1.0       # aligned + straight
+    assert m.reward_for(0, 20) == 0.0      # aligned but turning
+
+
+def test_reward_for_boundaries():
+    m = load()
+    assert m.reward_for(6, 0) == 1.0       # |e|&lt;=6 aligned
+    assert m.reward_for(6.1, 0) == 0.0     # just past tol, not correcting
+    assert m.reward_for(10, 3) == 0.0      # == tol_straight, not &gt; it
+    assert m.reward_for(10, 3.1) == 1.0</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'reward_for'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>def reward_for(e, steering, tol_align=TOL_ALIGN, tol_straight=TOL_STRAIGHT):
+    """Binary reward (spec section 5): 1.0 iff the steering command is the
+    correct corrective action for alignment error e (+ = tangent to the left)."""
+    if e &gt; tol_align:                                  # tangent left -&gt; turn LEFT
+        return 1.0 if steering &gt; tol_straight else 0.0
+    if e &lt; -tol_align:                                 # tangent right -&gt; turn RIGHT
+        return 1.0 if steering &lt; -tol_straight else 0.0
+    return 1.0 if abs(steering) &lt;= tol_straight else 0.0   # aligned -&gt; go straight</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: binary reward rule (reward_for)"</pre>
+</div>
+<div class="card">
+<h2><span class="badge" style="background:#a06cff">T7</span>reward_function 整合 + 驗證</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex.py</code></li><li>修改 <code>tests/reward/test_tangent_apex.py</code></li></ul>
+<div class="lbl">介面</div>
+<ul><li><b>Consumes：</b><code>build_cache · next_corner · apex_polyline · tangent_point · bearing · normalize_deg · reward_for · _CACHE</code></li><li><b>Produces：</b><ul><li><code>reward_function(params)</code> → float：DeepRacer 進入點；首呼叫建快取；無彎→直行</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex.py</code></div>
+<pre>from topracer.reward.verify import verify_reward_source, SAMPLE_PARAMS
+
+
+def test_passes_reward_source_verifier():
+    ok, msg = verify_reward_source(open(_REWARD, encoding="utf-8").read())
+    assert ok, msg
+
+
+def test_no_corner_rewards_going_straight():
+    m = load()
+    m._CACHE = None                                   # SAMPLE_PARAMS has no corner
+    p = dict(SAMPLE_PARAMS); p["steering_angle"] = 0.0
+    assert m.reward_function(p) == 1.0                # straight -&gt; reward
+    m._CACHE = None
+    p["steering_angle"] = 20.0
+    assert m.reward_function(p) == 0.0                # turning, no corner -&gt; 0
+
+
+def test_full_pipeline_left_corner():
+    m = load()
+    m._CACHE = {"left": {2}, "right": set(), "entries": [2],
+                "corners": [(2, 4, "L")],
+                "apex": {2: (0.0, 1.0), 3: (0.5, 1.2), 4: (1.0, 1.0)}, "n": 8}
+    base = {"x": 0.0, "y": 0.0, "heading": 0.0, "track_width": 0.6,
+            "waypoints": [(0.0, 0.0), (1.0, 0.0)], "closest_waypoints": [1, 2]}
+    # tangent point from (0,0) is (1,1) -&gt; bearing 45 -&gt; e=45 -&gt; must turn LEFT
+    assert m.reward_function(dict(base, steering_angle=15.0)) == 1.0
+    assert m.reward_function(dict(base, steering_angle=-15.0)) == 0.0</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'reward_function'（且 verifier 測試失敗）</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex.py</code></div>
+<pre>def reward_function(params):
+    """DeepRacer entry point. Reward correct corrective steering toward the next
+    corner's dynamic tangent point; build &amp; cache the bend tables on first call."""
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = build_cache(params["waypoints"], params["track_width"])
+    c = _CACHE
+    steering = float(params["steering_angle"])
+    _, nxt = params["closest_waypoints"]
+    corner = next_corner(int(nxt), c["corners"], c["n"])
+    if corner is None:
+        return reward_for(0.0, steering)               # no corner -&gt; reward straight
+    P = (float(params["x"]), float(params["y"]))
+    B = apex_polyline(corner, c["apex"], c["n"])
+    T = tangent_point(P, B, corner[2] == "L")
+    e = normalize_deg(bearing(P, T) - float(params["heading"]))
+    return reward_for(e, steering)</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部綠燈（2018 測試通過或 skip）</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex.py" tests/reward/test_tangent_apex.py
+git commit -m "Tangent reward: reward_function integration + source verifier test"</pre>
+</div>
+
+<h2>規格覆蓋對照</h2>
+<table>
+<tr><th>規格章節</th><th>對應任務</th></tr>
+<tr><td>§2 邊界推導（center ± half·nL）</td><td>T2 <code>left_normal · build_cache</code></td></tr>
+<tr><td>§3 四張表（左/右/入口/apex）</td><td>T1 <code>classify_bends · find_entries</code> · T2 <code>build_cache</code></td></tr>
+<tr><td>§4.1 下一個彎 / §4.2 支撐切點 / §4.3 對準誤差</td><td>T3 <code>next_corner</code> · T4 <code>tangent_point</code> · T5＋T7</td></tr>
+<tr><td>§5 必要動作＋二元獎勵</td><td>T6 <code>reward_for</code></td></tr>
+<tr><td>§6 完整流程</td><td>T7 <code>reward_function</code></td></tr>
+<tr><td>§7 邊界情況（無彎→直行、離道獨立、退化取中點）</td><td>T7（None→直行）· T4（退化）· 不讀 is_offtrack</td></tr>
+<tr><td>§8 單檔自動掃描、通過 verifier</td><td>T7 <code>test_passes_reward_source_verifier</code></td></tr>
+<tr><td>§9 驗收 1–9 / §10 常數</td><td>T6（reward_for 各情況）＋T7（完整左彎管線）· T1（常數）</td></tr>
+</table>
+
+<div class="note warn">
+<b>範圍提醒（A 案，使用者拍板）：</b>本獎勵<b>不含</b>速度／在道／前進項，是<b>純轉向方向</b>訊號；
+實戰時建議與速度／進度獎勵<b>相加</b>，本項專責「轉向方向」的塑形（見規格 §7）。
+</div>
+
+<p class="sub" style="margin-top:40px">— 計畫書結束。執行：superpowers:subagent-driven-development（每任務派新 subagent、兩段審查）或 executing-plans（本 session 批次執行）。</p>
+</div></body></html>
