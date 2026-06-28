@@ -174,7 +174,7 @@ def tangent_point(P, B, left_turn):
         if ok:
             best = cand; break
     return best</pre>
-<p class="sub">車接近時，被「擋住」的支撐觸點會沿邊界往前滑 → T 自然開展，等同人類「瞄準晚 apex，apex 隨進彎打開」。直線路段時下一彎很遠，T 幾乎在正前方 → <code>e≈0</code> → 要求直行。</p>
+<p class="sub">這個支撐切點就是駕駛學的 <b>limit point</b>。<b>關鍵：車要靠外側進彎</b> —— 從外側看出去，支撐切點正好落在 <b>apex</b>，且切線只在 apex <b>輕觸</b>內側邊界（相切非穿越），車沿切線過彎<b>不會撞牆</b>。直線路段時下一彎很遠 → 切點幾乎在正前方 → <code>e≈0</code> → 直行（車自然保持靠外側）。隨車過彎，limit point 沿邊界滑向出口。</p>
 
 <h3>4.3 對準誤差 e</h3>
 <pre>bearing = degrees( atan2(T.y - P.y, T.x - P.x) )
@@ -187,46 +187,48 @@ e = normalize_deg( bearing - heading )       # (-180, 180]，正=切點在車頭
     <marker id="g2" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#a06cff"/></marker>
     <marker id="g3" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#e0a000"/></marker>
   </defs>
-  <!-- asphalt fill (left corner: straight then turns up/left) -->
-  <path d="M70,150 L380,150 Q448,158 458,108 Q464,66 432,48 L520,34 Q590,56 580,138 Q566,255 432,255 L70,255 Z" fill="#12151c"/>
-  <!-- inner (apex-side) boundary -->
-  <path d="M70,150 L380,150 Q448,158 458,108 Q464,66 432,48" fill="none" stroke="#1f77b4" stroke-width="3"/>
-  <!-- outer boundary -->
-  <path d="M70,255 L432,255 Q566,255 580,138 Q590,56 520,34" fill="none" stroke="#6b7686" stroke-width="2.5"/>
-  <text x="232" y="143" fill="#1f77b4" font-size="13">內側邊界（apex 側）</text>
-  <text x="120" y="276" fill="#6b7686" font-size="13">外側邊界</text>
-  <text x="466" y="112" fill="#9aa4b2" font-size="12">apex（最深處）</text>
+  <!-- asphalt fill: a left corner whose inner edge bulges DOWN toward the car at the apex -->
+  <path d="M70,135 L330,135 Q415,142 432,168 Q448,118 462,56 L545,44 Q596,82 590,156 Q584,260 470,260 L70,260 Z" fill="#12151c"/>
+  <!-- inner (apex-side) boundary: straight, then bulges to the apex (innermost point), then away -->
+  <path d="M70,135 L330,135 Q415,142 432,168 Q448,118 462,56" fill="none" stroke="#1f77b4" stroke-width="3"/>
+  <!-- outer boundary (the car hugs this) -->
+  <path d="M70,260 L470,260 Q584,260 590,156 Q596,82 545,44" fill="none" stroke="#6b7686" stroke-width="2.5"/>
+  <text x="150" y="128" fill="#1f77b4" font-size="13">內側邊界（apex 側）</text>
+  <text x="110" y="281" fill="#6b7686" font-size="13">外側邊界（車靠這側進彎）</text>
+  <text x="442" y="184" fill="#9aa4b2" font-size="12">apex＝內側最深點</text>
 
-  <!-- car: top-down box + 4 wheels, heading +x (horizontal) -->
+  <!-- sight line = TANGENT: drawn first so the car sits on top. It only kisses the apex,
+       then continues up into the corner exit (track-out). The car drives ALONG this line. -->
+  <line x1="206" y1="228" x2="524" y2="143" stroke="#2ca02c" stroke-width="2.5" marker-end="url(#g1)"/>
+  <text x="232" y="170" fill="#2ca02c" font-size="12.5">視線＝切線：沿此線過彎，僅於 apex 輕觸內側（不撞牆）</text>
+  <!-- tangent (kiss) point at the apex -->
+  <circle cx="432" cy="168" r="6" fill="#2ca02c"/>
+  <text x="440" y="160" fill="#2ca02c" font-size="14" font-weight="bold">切點 T＝apex</text>
+  <!-- limit point recedes toward the exit as the car advances -->
+  <path d="M436,165 Q450,120 460,66" fill="none" stroke="#e0a000" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#g3)"/>
+  <text x="300" y="306" fill="#e0a000" font-size="12.5">切點（limit point）隨車前進沿邊界滑向出口</text>
+
+  <!-- car: top-down box + 4 wheels, hugging the OUTER edge, heading +x (horizontal) -->
   <g>
-    <rect x="156" y="183" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
-    <rect x="156" y="223" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
-    <rect x="178" y="183" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
-    <rect x="178" y="223" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
-    <rect x="147" y="188" width="56" height="34" rx="5" fill="#aeb8c6" stroke="#2a2f3a" stroke-width="1.5"/>
-    <polygon points="203,196 203,214 217,205" fill="#a06cff"/>
-    <text x="138" y="252" fill="#fff" font-size="13">車（俯視）</text>
+    <rect x="152" y="209" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="152" y="247" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="176" y="209" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="176" y="247" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="144" y="215" width="56" height="34" rx="5" fill="#aeb8c6" stroke="#2a2f3a" stroke-width="1.5"/>
+    <polygon points="200,223 200,241 214,232" fill="#a06cff"/>
+    <text x="118" y="205" fill="#fff" font-size="12.5">車（俯視，靠外側）</text>
   </g>
 
   <!-- heading (horizontal) -->
-  <line x1="217" y1="205" x2="352" y2="205" stroke="#a06cff" stroke-width="2.5" marker-end="url(#g2)"/>
-  <text x="250" y="224" fill="#a06cff" font-size="13">車頭 heading（水平）</text>
-  <!-- sight line = tangent, grazes the corner ENTRY -->
-  <line x1="210" y1="201" x2="380" y2="150" stroke="#2ca02c" stroke-width="2.5" marker-end="url(#g1)"/>
-  <text x="236" y="178" fill="#2ca02c" font-size="13">視線＝切線（擦過彎入口）</text>
-  <!-- tangent point at the entry -->
-  <circle cx="380" cy="150" r="6" fill="#2ca02c"/>
-  <text x="388" y="145" fill="#2ca02c" font-size="14" font-weight="bold">切點 T（彎入口）</text>
-  <!-- T slides toward apex as the car advances -->
-  <path d="M386,151 Q448,158 456,114" fill="none" stroke="#e0a000" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#g3)"/>
+  <line x1="214" y1="232" x2="350" y2="232" stroke="#a06cff" stroke-width="2.5" marker-end="url(#g2)"/>
+  <text x="250" y="250" fill="#a06cff" font-size="13">車頭 heading</text>
   <!-- e angle wedge between heading and sight -->
-  <path d="M263,205 A46,46 0 0 0 261,190" fill="none" stroke="#e0a000" stroke-width="2"/>
-  <text x="270" y="197" fill="#e0a000" font-size="14">e</text>
+  <path d="M264,232 A50,50 0 0 0 262,219" fill="none" stroke="#e0a000" stroke-width="2"/>
+  <text x="270" y="225" fill="#e0a000" font-size="14">e</text>
   <!-- annotation -->
-  <text x="70" y="30" fill="#e6e6e6" font-size="14">本例：車頭水平 → 切點 T 在車頭<tspan fill="#e0a000" font-weight="bold">左（上）方</tspan> → <tspan fill="#e0a000">e &gt; 0</tspan> → 應 <tspan fill="#1f77b4" font-weight="bold">左轉</tspan></text>
-  <text x="70" y="320" fill="#e0a000" font-size="12.5">切點隨車前進沿內側邊界滑向 apex → 出口（晚 apex）</text>
+  <text x="60" y="28" fill="#e6e6e6" font-size="13.5">本例：車靠外側、沿切線過彎（切線僅於 apex 相切＝不撞牆）；車頭在 T <tspan fill="#e0a000" font-weight="bold">右（下）方</tspan> → <tspan fill="#e0a000">e &gt; 0</tspan> → 應 <tspan fill="#1f77b4" font-weight="bold">左轉</tspan></text>
 </svg>
-<figcaption>圖 3 — 左彎的視線切點幾何。車（俯視方塊＋四輪）在接近段；視線＝切線只<b>擦過內側邊界的「彎入口」T</b>（不是 apex）。車頭在 T 右方 → e&gt;0 → 應左轉。<span style="color:#e0a000">虛線</span>：切點隨車前進沿邊界滑向 apex。</figcaption>
+<figcaption>圖 3 — 左彎的視線切點幾何（修正版）。車（俯視方塊＋四輪）<b>靠外側</b>進彎，沿<b>切線</b>行進；切線只在 <b>apex 輕觸</b>內側邊界（相切、非穿越）＝<b>不會撞牆</b>。車頭在 T 右方 → e&gt;0 → 應左轉。<span style="color:#e0a000">虛線</span>：切點（limit point）隨車前進沿邊界滑向出口。</figcaption>
 </figure>
 
 <h2>5. 必要動作與獎勵（核心）</h2>
