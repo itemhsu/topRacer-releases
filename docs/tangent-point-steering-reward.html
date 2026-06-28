@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>切點行為獎勵 (Tangent-Point Steering Reward) — 設計規格書</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;
+        --blue:#1f77b4;--red:#d62728;--green:#2ca02c;--amber:#e0a000;--line:#2a2f3a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.7 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 22px 80px}
+  h1{font-size:27px;margin:0 0 6px}
+  h2{font-size:20px;margin:38px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:#fff}
+  h3{font-size:16px;margin:22px 0 8px;color:#cdd6e2}
+  .sub{color:var(--muted);margin:0 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);
+       color:var(--muted);margin-right:6px}
+  code,pre{font-family:"SF Mono",Menlo,Consolas,monospace}
+  code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff}
+  pre{background:#0c0e13;border:1px solid var(--line);border-radius:10px;padding:16px;overflow:auto;font-size:13px;line-height:1.55}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#1d212a;color:#fff}
+  td.c,th.c{text-align:center}
+  .fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0;text-align:center}
+  .fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+  .blue{color:var(--blue)} .red{color:var(--red)} .green{color:var(--green)} .amber{color:var(--amber)} .accent{color:var(--accent)}
+  .pill{font-weight:700}
+  ul{margin:8px 0 8px 0;padding-left:20px} li{margin:4px 0}
+  .kbd{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13px}
+  .note{border-left:3px solid var(--accent);padding:8px 14px;background:#15121d;border-radius:0 8px 8px 0;margin:12px 0}
+  .warn{border-left:3px solid var(--amber);background:#1c1708}
+  svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>切點行為獎勵 · Tangent-Point Steering Reward</h1>
+<p class="sub">topRacer 獎勵函數設計規格書 · 2026-06-28 · 通用版（不綁特定賽道）</p>
+<p>
+  <span class="tag">動態視線切點</span><span class="tag">自動取彎內側</span>
+  <span class="tag">二元獎勵 0 / 1</span><span class="tag">容忍 ±6° / ±3°</span>
+  <span class="tag">純轉向方向項</span><span class="tag">邊界由 waypoints 推導</span>
+</p>
+
+<div class="card">
+<h3 style="margin-top:4px">一句話</h3>
+獎勵的依據是<b>轉向指令是否為「把車頭轉回切點」的正確修正動作</b>，而<b>不是</b>車頭當下對不對準切點。
+對準了卻還在轉 → 不給；沒對準但往切點方向轉 → 給。
+切點是「從車子位置對下一個彎內側邊界做的視線支撐切線」的觸點，會隨車前進而沿邊界滑動（真實賽車線）。
+</div>
+
+<h2>1. 目標與動機</h2>
+<p>
+讓 policy 學會「<b>把車頭對著下一個彎的切點開</b>」這個轉向控制法則。一般的中線獎勵只獎勵「貼著中線」，
+學不出賽車線（晚 apex、切內側）。本獎勵把<b>正確的轉向修正動作</b>直接變成訊號：偏了就獎勵轉回、對準就獎勵維持，
+而且<b>只看轉向指令</b>，不混入速度或貼線，讓「轉向方向」這件事被獨立、乾淨地塑形。
+</p>
+
+<h2>2. 賽道與座標：邊界由 waypoints 推導（通用）</h2>
+<p>
+DeepRacer 的 <code>reward_function(params)</code> 只會收到<b>中線</b> <code>params["waypoints"]</code> 與平均道寬
+<code>params["track_width"]</code>，<b>拿不到內/外邊界陣列</b>。因此本設計<b>不烤任何特定賽道座標</b>，
+而是每條賽道都從中線即時推導邊界 —— 任何 DeepRacer 賽道皆可直接套用。
+</p>
+
+<h3>2.1 推導公式</h3>
+<p>對第 <code>i</code> 個中線點，取局部行進方向的<b>左法線</b> <code>nL</code>，沿法線偏移半個道寬即得兩側邊界：</p>
+<pre>t   = center[i+1] - center[i-1]            # 局部行進方向（環狀索引）
+nL  = normalize( (-t.y,  t.x) )            # 左法線（單位向量）
+half = track_width / 2
+
+inner[i] = center[i] + half * nL           # 左側邊界
+outer[i] = center[i] - half * nL           # 右側邊界</pre>
+
+<figure class="fig">
+<svg viewBox="0 0 720 250" width="100%" style="max-width:720px">
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/>
+    </marker>
+    <marker id="ahb" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#1f77b4"/>
+    </marker>
+    <marker id="ahr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#d62728"/>
+    </marker>
+  </defs>
+  <!-- centerline -->
+  <line x1="60" y1="125" x2="660" y2="125" stroke="#cdd6e2" stroke-width="2" stroke-dasharray="7 5"/>
+  <text x="668" y="129" fill="#cdd6e2" font-size="13">center</text>
+  <!-- inner (top/left) -->
+  <line x1="60" y1="55" x2="660" y2="55" stroke="#1f77b4" stroke-width="2.5"/>
+  <text x="668" y="59" fill="#1f77b4" font-size="13">inner = center + ½w·nL</text>
+  <!-- outer (bottom/right) -->
+  <line x1="60" y1="195" x2="660" y2="195" stroke="#d62728" stroke-width="2.5"/>
+  <text x="668" y="199" fill="#d62728" font-size="13">outer = center − ½w·nL</text>
+  <!-- normals at three points -->
+  <g>
+    <circle cx="200" cy="125" r="4" fill="#fff"/>
+    <line x1="200" y1="125" x2="200" y2="58" stroke="#1f77b4" stroke-width="2" marker-end="url(#ahb)"/>
+    <line x1="200" y1="125" x2="200" y2="192" stroke="#d62728" stroke-width="2" marker-end="url(#ahr)"/>
+    <text x="208" y="92" fill="#1f77b4" font-size="12">nL</text>
+    <text x="208" y="170" fill="#d62728" font-size="12">−nL</text>
+  </g>
+  <circle cx="430" cy="125" r="4" fill="#fff"/>
+  <line x1="430" y1="125" x2="430" y2="58" stroke="#1f77b4" stroke-width="2" marker-end="url(#ahb)"/>
+  <line x1="430" y1="125" x2="430" y2="192" stroke="#d62728" stroke-width="2" marker-end="url(#ahr)"/>
+  <!-- travel dir arrow -->
+  <line x1="300" y1="140" x2="360" y2="140" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="305" y="158" fill="#9aa4b2" font-size="12">行進方向 t</text>
+  <text x="60" y="232" fill="#9aa4b2" font-size="12">半寬 ½w = track_width / 2 ＝ 2018 約 0.38 m（平均道寬 0.762 m）</text>
+</svg>
+<figcaption>圖 2 — 由中線 + 半寬法線推導兩側邊界。任何賽道通用，不需內建座標。</figcaption>
+</figure>
+
+<div class="note">
+近似說明：<code>track_width</code> 是<b>平均</b>道寬，真實寬度沿賽道有些微變化，故推導邊界與實際邊界會有公分級偏差。
+對「±6° 轉向方向」這種容忍度可忽略。若日後要高擬真，可選擇性改讀真實 npy 邊界，但預設走通用版。
+</div>
+
+<h2>3. 第一次呼叫的快取：四張表</h2>
+<p>比照現有 <span class="kbd">Apex Brake Speed</span> 的做法，第一次呼叫時用中線算一次並快取（之後每步直接查）：</p>
+<table>
+<tr><th>快取</th><th>內容</th><th>怎麼算</th></tr>
+<tr><td><code>_LEFT</code></td><td>左彎索引集合</td><td>有號曲率 <code>turn3(wp[i-2],wp[i],wp[i+2]) &gt; eps</code></td></tr>
+<tr><td><code>_RIGHT</code></td><td>右彎索引集合</td><td><code>turn3(...) &lt; -eps</code>（<code>eps = 0.15</code>）</td></tr>
+<tr><td><code>_ENTRIES</code></td><td><b>彎道入口表</b>：每個彎的起點索引</td><td>本身是彎、前一點不是彎：<code>i∈彎 且 (i-1)∉彎</code></td></tr>
+<tr><td><code>_APEX</code></td><td>每個彎索引預先算好的 apex 內側點 <code>(x,y)</code></td><td>左彎 <code>center+½w·nL</code>、右彎 <code>center−½w·nL</code></td></tr>
+</table>
+<p class="sub">中線是靜態的，四張表算一次即可。實測 2018 共偵測到 <b>5 個彎</b>（見圖 1）。</p>
+
+<figure class="fig">
+<svg viewBox="0 0 720 471" width="100%" style="max-width:680px;background:#0a0c10;border-radius:8px">
+  <polyline points="275.2,442.4 288.8,442.3 302.3,442.3 315.9,442.3 329.5,442.3 343.1,442.3 356.6,442.3 370.2,442.3 383.8,442.3 397.4,442.3 411.0,442.3 424.6,442.3 438.1,442.3 451.7,442.3 465.3,442.2 478.9,442.2 492.5,442.2 506.1,442.2 519.5,442.2 533.0,442.3 547.1,442.4 562.3,442.0 577.7,440.7 595.5,438.1 614.4,431.6 630.3,422.8 644.6,412.9 658.9,400.0 670.6,384.5 679.3,368.9 686.1,352.5 691.2,333.8 692.8,313.4 690.7,295.0 687.0,278.0 680.9,260.5 672.0,243.7 660.7,228.8 647.9,215.9 633.2,204.6 616.8,195.5 599.1,188.9 581.0,185.2 564.2,184.0 549.2,183.6 535.1,183.8 521.6,183.9 508.1,184.0 494.5,184.0 480.7,184.1 467.2,184.4 456.2,184.4 446.8,183.2 437.9,181.0 430.5,178.0 424.1,173.9 417.2,167.5 409.5,159.4 401.8,149.9 393.3,139.4 384.6,128.8 376.1,118.3 367.5,107.7 358.9,97.2 350.4,86.7 341.8,76.2 331.7,63.7 317.5,50.6 301.7,40.6 283.7,32.1 261.3,27.6 251.4,27.5 236.7,27.2 217.5,27.2 204.0,27.7 191.1,28.1 177.4,28.5 163.7,28.9 149.9,29.3 135.4,29.9 117.6,31.3 97.3,37.0 79.2,47.0 64.2,59.1 51.3,73.2 40.3,89.7 32.4,108.2 28.1,127.5 27.2,145.8 28.1,162.6 30.5,179.2 34.2,194.6 38.0,207.9 41.0,220.2 43.8,232.8 46.5,245.9 49.3,259.2 52.0,272.5 54.8,285.8 57.5,299.1 60.3,312.4 63.0,325.7 65.9,339.2 69.1,353.8 73.6,369.5 80.9,387.4 92.2,403.6 107.0,419.4 126.6,430.2 144.0,436.1 160.5,439.6 176.2,441.9 191.9,443.1 207.5,443.4 221.9,442.9 235.2,442.5 248.2,442.3 261.5,442.3 275.0,442.4 275.2,442.4" fill="none" stroke="#3a4150" stroke-width="2"/>
+  <polyline points="275.0,373.3 288.6,373.2 302.3,373.2 315.9,373.2 329.5,373.2 343.0,373.2 356.6,373.2 370.2,373.2 383.8,373.2 397.4,373.2 411.0,373.2 424.5,373.2 438.1,373.2 451.7,373.1 465.3,373.1 478.9,373.1 492.4,373.1 506.0,373.1 519.7,373.1 533.5,373.2 546.5,373.3 558.5,373.0 570.2,372.0 579.3,370.9 586.0,368.5 593.9,364.1 602.0,358.5 607.9,353.4 612.5,347.0 617.0,338.9 620.8,329.9 623.2,321.6 623.7,314.9 622.5,306.4 620.5,296.7 617.5,288.1 613.7,280.9 608.6,274.2 602.2,267.8 595.2,262.3 587.9,258.3 580.1,255.4 571.7,253.7 561.1,253.0 548.8,252.7 535.7,252.9 522.1,253.0 508.5,253.1 494.8,253.1 481.5,253.2 467.8,253.5 451.7,253.3 434.1,251.1 416.3,246.7 398.5,239.2 382.2,228.8 368.8,216.9 357.7,205.0 348.2,193.5 339.6,182.9 331.1,172.5 322.5,161.9 313.9,151.4 305.4,140.9 296.7,130.3 288.1,119.6 281.0,110.7 275.4,105.4 268.2,101.0 262.8,98.0 251.8,96.0 251.4,96.6 236.2,96.4 218.4,96.3 206.4,96.8 193.2,97.2 179.3,97.6 165.8,97.9 152.4,98.4 139.2,98.9 129.1,99.5 123.5,101.0 118.0,104.1 111.8,109.3 105.7,115.9 100.9,122.9 98.1,129.4 96.7,136.4 96.3,145.6 96.9,155.8 98.3,166.0 101.1,177.1 104.7,190.2 108.3,204.4 111.4,218.4 114.2,231.9 116.9,245.2 119.7,258.5 122.4,271.8 125.2,285.1 127.9,298.4 130.7,311.6 133.5,324.8 136.1,336.8 139.1,347.2 141.7,354.6 146.0,360.3 149.5,364.8 153.8,366.6 162.2,369.4 172.6,371.6 183.9,373.2 195.3,374.1 206.9,374.3 219.6,373.9 233.6,373.4 247.7,373.2 261.6,373.2 275.3,373.3 275.0,373.3" fill="none" stroke="#3a4150" stroke-width="2"/>
+  <polyline points="275.1,407.8 288.7,407.8 302.3,407.8 315.9,407.7 329.5,407.7 343.1,407.7 356.6,407.7 370.2,407.7 383.8,407.7 397.4,407.7 411.0,407.7 424.6,407.7 438.1,407.7 451.7,407.7 465.3,407.7 478.9,407.7 492.5,407.7 506.0,407.7 519.6,407.7 533.2,407.7 546.8,407.8 560.4,407.5 573.9,406.4 587.4,404.5 600.2,400.0 612.1,393.4 623.3,385.7 633.4,376.7 641.6,365.8 648.2,353.9 653.4,341.2 657.2,327.7 658.2,314.2 656.6,300.7 653.7,287.4 649.2,274.3 642.9,262.3 634.6,251.5 625.0,241.8 614.2,233.5 602.3,226.9 589.6,222.2 576.3,219.4 562.7,218.5 549.0,218.2 535.4,218.3 521.8,218.4 508.3,218.5 494.7,218.6 481.1,218.6 467.5,218.9 453.9,218.8 440.4,217.2 427.1,213.8 414.5,208.6 403.1,201.4 393.0,192.2 383.6,182.2 375.0,171.7 366.5,161.1 357.9,150.6 349.3,140.1 340.7,129.6 332.1,119.0 323.6,108.5 315.0,97.9 306.3,87.2 296.5,78.0 284.9,70.8 273.2,65.1 256.6,61.8 251.4,62.0 236.5,61.8 218.0,61.8 205.2,62.2 192.1,62.7 178.3,63.0 164.8,63.4 151.1,63.9 137.3,64.4 123.4,65.4 110.4,69.0 98.6,75.6 88.0,84.2 78.5,94.6 70.6,106.3 65.2,118.8 62.4,132.0 61.8,145.7 62.5,159.2 64.4,172.6 67.6,185.9 71.3,199.1 74.7,212.3 77.6,225.6 80.3,238.9 83.1,252.2 85.8,265.5 88.6,278.8 91.4,292.1 94.1,305.4 96.9,318.7 99.7,332.0 102.6,345.3 106.3,358.3 111.3,371.0 119.1,382.0 128.2,392.1 140.2,398.4 153.1,402.7 166.6,405.6 180.1,407.5 193.6,408.6 207.2,408.9 220.8,408.4 234.4,408.0 248.0,407.8 261.6,407.8 275.1,407.8 275.1,407.8" fill="none" stroke="#6b7686" stroke-width="1" stroke-dasharray="5 4"/>
+  <circle cx="570.2" cy="372.0" r="3" fill="#1f77b4"/><circle cx="579.3" cy="370.9" r="3" fill="#1f77b4"/><circle cx="586.0" cy="368.5" r="3" fill="#1f77b4"/><circle cx="593.9" cy="364.1" r="3" fill="#1f77b4"/><circle cx="602.0" cy="358.5" r="3" fill="#1f77b4"/><circle cx="607.9" cy="353.4" r="3" fill="#1f77b4"/><circle cx="612.5" cy="347.0" r="3" fill="#1f77b4"/><circle cx="617.0" cy="338.9" r="3" fill="#1f77b4"/><circle cx="620.8" cy="329.9" r="3" fill="#1f77b4"/><circle cx="623.2" cy="321.6" r="3" fill="#1f77b4"/><circle cx="623.7" cy="314.9" r="3" fill="#1f77b4"/><circle cx="622.5" cy="306.4" r="3" fill="#1f77b4"/><circle cx="620.5" cy="296.7" r="3" fill="#1f77b4"/><circle cx="617.5" cy="288.1" r="3" fill="#1f77b4"/><circle cx="613.7" cy="280.9" r="3" fill="#1f77b4"/><circle cx="608.6" cy="274.2" r="3" fill="#1f77b4"/><circle cx="602.2" cy="267.8" r="3" fill="#1f77b4"/><circle cx="595.2" cy="262.3" r="3" fill="#1f77b4"/><circle cx="587.9" cy="258.3" r="3" fill="#1f77b4"/><circle cx="580.1" cy="255.4" r="3" fill="#1f77b4"/><circle cx="571.7" cy="253.7" r="3" fill="#1f77b4"/><circle cx="456.2" cy="184.4" r="3" fill="#d62728"/><circle cx="446.8" cy="183.2" r="3" fill="#d62728"/><circle cx="437.9" cy="181.0" r="3" fill="#d62728"/><circle cx="430.5" cy="178.0" r="3" fill="#d62728"/><circle cx="424.1" cy="173.9" r="3" fill="#d62728"/><circle cx="417.2" cy="167.5" r="3" fill="#d62728"/><circle cx="281.0" cy="110.7" r="3" fill="#1f77b4"/><circle cx="275.4" cy="105.4" r="3" fill="#1f77b4"/><circle cx="268.2" cy="101.0" r="3" fill="#1f77b4"/><circle cx="262.8" cy="98.0" r="3" fill="#1f77b4"/><circle cx="251.8" cy="96.0" r="3" fill="#1f77b4"/><circle cx="129.1" cy="99.5" r="3" fill="#1f77b4"/><circle cx="123.5" cy="101.0" r="3" fill="#1f77b4"/><circle cx="118.0" cy="104.1" r="3" fill="#1f77b4"/><circle cx="111.8" cy="109.3" r="3" fill="#1f77b4"/><circle cx="105.7" cy="115.9" r="3" fill="#1f77b4"/><circle cx="100.9" cy="122.9" r="3" fill="#1f77b4"/><circle cx="98.1" cy="129.4" r="3" fill="#1f77b4"/><circle cx="96.7" cy="136.4" r="3" fill="#1f77b4"/><circle cx="96.3" cy="145.6" r="3" fill="#1f77b4"/><circle cx="96.9" cy="155.8" r="3" fill="#1f77b4"/><circle cx="98.3" cy="166.0" r="3" fill="#1f77b4"/><circle cx="139.1" cy="347.2" r="3" fill="#1f77b4"/><circle cx="141.7" cy="354.6" r="3" fill="#1f77b4"/><circle cx="146.0" cy="360.3" r="3" fill="#1f77b4"/><circle cx="149.5" cy="364.8" r="3" fill="#1f77b4"/><circle cx="153.8" cy="366.6" r="3" fill="#1f77b4"/><circle cx="162.2" cy="369.4" r="3" fill="#1f77b4"/><circle cx="172.6" cy="371.6" r="3" fill="#1f77b4"/>
+  <text x="658.2" y="314.2" font-size="13" font-weight="bold" fill="#1f77b4" text-anchor="middle">L22-42</text><text x="427.1" y="213.8" font-size="13" font-weight="bold" fill="#d62728" text-anchor="middle">R51-56</text><text x="284.9" y="70.8" font-size="13" font-weight="bold" fill="#1f77b4" text-anchor="middle">L66-70</text><text x="70.6" y="106.3" font-size="13" font-weight="bold" fill="#1f77b4" text-anchor="middle">L80-90</text><text x="128.2" y="392.1" font-size="13" font-weight="bold" fill="#1f77b4" text-anchor="middle">L104-110</text>
+  <circle cx="275.1" cy="407.8" r="6" fill="none" stroke="#2ca02c" stroke-width="2.5"/>
+  <text x="262" y="430" fill="#2ca02c" font-size="12">起點 / 終點線</text>
+  <text x="20" y="24" fill="#9aa4b2" font-size="13">2018 re:Invent ·
+    <tspan fill="#1f77b4">● 左彎 apex（內側）</tspan> ·
+    <tspan fill="#d62728">● 右彎 apex（外側）</tspan></text>
+</svg>
+<figcaption>圖 1 — 用真實 2018 座標畫的賽道（外/內邊界為衍生邊界）。彩點＝各彎 apex-side 邊界點；左彎內側落在 inner、右彎內側落在 outer，驗證自動選邊正確。</figcaption>
+</figure>
+
+<h2>4. 動態視線切點（每步）</h2>
+<h3>4.1 找「下一個彎」</h3>
+<p>
+由車子的 <code>closest_waypoints = [prev, next]</code> 取 <code>next</code>，在 <code>_ENTRIES</code> 中找<b>車前方最近、尚未通過</b>的彎入口（環狀；若已在彎中則取當前彎）。
+取該彎所有索引對應的 <code>_APEX</code> 點，組成 apex-side 邊界折線 <code>B = [B₀ … Bₘ]</code>。
+</p>
+
+<h3>4.2 支撐切線求切點 T</h3>
+<p>
+切點 T = 邊界折線上「整段邊界都落在視線 <code>P→T</code> 同一側」的那個頂點（凸弧的支撐觸點）。用外積判定，<b>O(m)</b> 掃描：
+</p>
+<pre>def cross(p, a, b):                  # (a-p) × (b-p)
+    return (a.x-p.x)*(b.y-p.y) - (a.y-p.y)*(b.x-p.x)
+
+# 左彎：取「所有其他邊界點都在視線左側」的支撐點（最順時針極端）
+# 右彎：取「所有其他邊界點都在視線右側」的支撐點（最逆時針極端）
+def tangent_point(P, B, left_turn):
+    best = B[0]
+    for cand in B:
+        ok = all( (cross(P, cand, other) >= 0) == left_turn          # 同側測試
+                  for other in B if other is not cand )
+        if ok:
+            best = cand; break
+    return best</pre>
+<p class="sub">車接近時，被「擋住」的支撐觸點會沿邊界往前滑 → T 自然開展，等同人類「瞄準晚 apex，apex 隨進彎打開」。直線路段時下一彎很遠，T 幾乎在正前方 → <code>e≈0</code> → 要求直行。</p>
+
+<h3>4.3 對準誤差 e</h3>
+<pre>bearing = degrees( atan2(T.y - P.y, T.x - P.x) )
+e = normalize_deg( bearing - heading )       # (-180, 180]，正=切點在車頭左方</pre>
+
+<figure class="fig">
+<svg viewBox="0 0 720 360" width="100%" style="max-width:720px">
+  <defs>
+    <marker id="g1" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#2ca02c"/></marker>
+    <marker id="g2" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#a06cff"/></marker>
+    <marker id="g3" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#e0a000"/></marker>
+  </defs>
+  <!-- track edges of a left corner -->
+  <path d="M120,330 L360,330 Q560,330 600,150 Q612,80 560,40" fill="none" stroke="#3a4150" stroke-width="3"/>
+  <path d="M120,250 L360,250 Q470,250 500,150 Q512,110 470,86" fill="none" stroke="#1f77b4" stroke-width="3"/>
+  <text x="505" y="150" fill="#1f77b4" font-size="13">內側邊界（apex 側）</text>
+  <text x="610" y="150" fill="#3a4150" font-size="13" stroke="#9aa4b2" stroke-width="0.2">外側</text>
+  <!-- car P -->
+  <g>
+    <circle cx="200" cy="290" r="7" fill="#fff"/>
+    <text x="180" y="285" fill="#fff" font-size="14">P 車</text>
+    <!-- heading (slightly right of T) -->
+    <line x1="200" y1="290" x2="470" y2="250" stroke="#a06cff" stroke-width="2.5" marker-end="url(#g2)"/>
+    <text x="330" y="262" fill="#a06cff" font-size="13">車頭 heading</text>
+    <!-- sight to T -->
+    <line x1="200" y1="290" x2="500" y2="150" stroke="#2ca02c" stroke-width="2.5" marker-end="url(#g1)" stroke-dasharray="2 0"/>
+    <text x="360" y="205" fill="#2ca02c" font-size="13">視線 P→T</text>
+  </g>
+  <!-- tangent point -->
+  <circle cx="500" cy="150" r="6" fill="#2ca02c"/>
+  <text x="510" y="146" fill="#2ca02c" font-size="14">T 切點</text>
+  <!-- e angle wedge -->
+  <path d="M250,283 A 56 56 0 0 0 247 261" fill="none" stroke="#e0a000" stroke-width="2"/>
+  <text x="258" y="250" fill="#e0a000" font-size="14">e</text>
+  <!-- annotation -->
+  <text x="120" y="40" fill="#e6e6e6" font-size="14">本例：車頭（紫）在切點 T（綠）<tspan fill="#e0a000" font-weight="bold">右方</tspan> → <tspan fill="#e0a000">e &gt; 0</tspan> → 應 <tspan fill="#1f77b4" font-weight="bold">左轉</tspan></text>
+</svg>
+<figcaption>圖 3 — 左彎的視線切點幾何。視線 P→T 支撐在內側邊界；車頭在 T 右方表示 e&gt;0，正確修正動作是左轉。</figcaption>
+</figure>
+
+<h2>5. 必要動作與獎勵（核心）</h2>
+<h3>5.1 由 e 決定「必要動作」</h3>
+<p>容忍值：對準死區 <code>TOL_ALIGN = 6°</code>，直行帶 <code>TOL_STRAIGHT = 3°</code>。</p>
+<table>
+<tr><th>對準狀態</th><th>條件</th><th>必要動作</th></tr>
+<tr><td>車頭在切點<b>右方</b></td><td class="c"><code>e &gt; +6°</code></td><td class="blue">左轉</td></tr>
+<tr><td>車頭在切點<b>左方</b></td><td class="c"><code>e &lt; −6°</code></td><td class="red">右轉</td></tr>
+<tr><td><b>已對準</b></td><td class="c"><code>|e| ≤ 6°</code></td><td>直行</td></tr>
+</table>
+
+<h3>5.2 二元獎勵（依據是轉向指令，不是對準狀態）</h3>
+<p>讀 <code>steering = params["steering_angle"]</code>（正＝左、負＝右）。方向對 → <span class="green pill">1.0</span>，否則 → <span class="pill">0.0</span>：</p>
+<table>
+<tr><th>必要動作</th><th class="c">給 1.0（方向對）</th><th class="c">給 0.0（沒做對）</th></tr>
+<tr><td class="blue">左轉</td><td class="c"><code>steering &gt; +3°</code></td><td class="c">直行帶內 或 右轉</td></tr>
+<tr><td class="red">右轉</td><td class="c"><code>steering &lt; −3°</code></td><td class="c">直行帶內 或 左轉</td></tr>
+<tr><td>直行</td><td class="c"><code>|steering| ≤ 3°</code></td><td class="c">任何 <code>|steering| &gt; 3°</code></td></tr>
+</table>
+<div class="note">
+語意檢查：<b>對準卻轉彎 → 0</b>（直行列，<code>|steering|&gt;3</code>）；<b>沒對準但往切點方向轉 → 1.0</b>（左/右轉列）。
+完全符合「轉向角度才是給獎勵的要素」。
+</div>
+
+<figure class="fig">
+<svg viewBox="0 0 720 250" width="100%" style="max-width:720px">
+  <!-- three panels -->
+  <g transform="translate(0,0)">
+    <rect x="14" y="20" width="216" height="210" rx="10" fill="#11141b" stroke="#2a2f3a"/>
+    <text x="122" y="44" fill="#1f77b4" font-size="14" text-anchor="middle" font-weight="bold">e &gt; +6° → 應左轉</text>
+    <circle cx="70" cy="150" r="6" fill="#fff"/>
+    <line x1="70" y1="150" x2="150" y2="110" stroke="#a06cff" stroke-width="2.5"/>
+    <line x1="70" y1="150" x2="170" y2="80" stroke="#2ca02c" stroke-width="2" stroke-dasharray="4 3"/>
+    <circle cx="170" cy="80" r="5" fill="#2ca02c"/>
+    <text x="60" y="200" fill="#e6e6e6" font-size="12.5">steering &gt; +3° → <tspan fill="#2ca02c" font-weight="bold">1.0</tspan></text>
+    <text x="60" y="218" fill="#9aa4b2" font-size="12">否則 → 0</text>
+  </g>
+  <g transform="translate(244,0)">
+    <rect x="14" y="20" width="216" height="210" rx="10" fill="#11141b" stroke="#2a2f3a"/>
+    <text x="122" y="44" fill="#e6e6e6" font-size="14" text-anchor="middle" font-weight="bold">|e| ≤ 6° → 應直行</text>
+    <circle cx="70" cy="150" r="6" fill="#fff"/>
+    <line x1="70" y1="150" x2="180" y2="120" stroke="#a06cff" stroke-width="2.5"/>
+    <line x1="70" y1="150" x2="185" y2="112" stroke="#2ca02c" stroke-width="2" stroke-dasharray="4 3"/>
+    <circle cx="185" cy="112" r="5" fill="#2ca02c"/>
+    <text x="60" y="200" fill="#e6e6e6" font-size="12.5">|steering| ≤ 3° → <tspan fill="#2ca02c" font-weight="bold">1.0</tspan></text>
+    <text x="60" y="218" fill="#9aa4b2" font-size="12">轉彎（&gt;3°）→ 0</text>
+  </g>
+  <g transform="translate(488,0)">
+    <rect x="14" y="20" width="216" height="210" rx="10" fill="#11141b" stroke="#2a2f3a"/>
+    <text x="122" y="44" fill="#d62728" font-size="14" text-anchor="middle" font-weight="bold">e &lt; −6° → 應右轉</text>
+    <circle cx="70" cy="150" r="6" fill="#fff"/>
+    <line x1="70" y1="150" x2="150" y2="190" stroke="#a06cff" stroke-width="2.5"/>
+    <line x1="70" y1="150" x2="170" y2="210" stroke="#2ca02c" stroke-width="2" stroke-dasharray="4 3"/>
+    <circle cx="170" cy="210" r="5" fill="#2ca02c"/>
+    <text x="60" y="205" fill="#e6e6e6" font-size="12.5">steering &lt; −3° → <tspan fill="#2ca02c" font-weight="bold">1.0</tspan></text>
+    <text x="60" y="223" fill="#9aa4b2" font-size="12">否則 → 0</text>
+  </g>
+</svg>
+<figcaption>圖 4 — 三種必要動作下的二元獎勵。紫＝車頭，綠＝視線到切點 T。</figcaption>
+</figure>
+
+<h2>6. 虛擬碼（完整流程）</h2>
+<pre>_CACHE = None   # (_LEFT, _RIGHT, _ENTRIES, _APEX, corner_dir)
+
+def reward_function(params):
+    global _CACHE
+    wp   = params["waypoints"]
+    w    = params["track_width"]
+    if _CACHE is None:
+        _CACHE = build_cache(wp, w)          # 四張表，只算一次
+    _LEFT, _RIGHT, _ENTRIES, _APEX, _DIR = _CACHE
+
+    P       = (params["x"], params["y"])
+    heading = params["heading"]
+    steer   = params["steering_angle"]
+    _, nxt  = params["closest_waypoints"]
+
+    corner  = next_corner(nxt, _ENTRIES, _DIR)     # 車前方最近的彎
+    B       = apex_polyline(corner, _APEX)         # apex-side 邊界折線
+    T       = tangent_point(P, B, _DIR[corner]=='L')
+    e       = normalize_deg( bearing(P, T) - heading )
+
+    if   e >  TOL_ALIGN:   return 1.0 if steer >  TOL_STRAIGHT else 0.0   # 應左轉
+    elif e < -TOL_ALIGN:   return 1.0 if steer < -TOL_STRAIGHT else 0.0   # 應右轉
+    else:                  return 1.0 if abs(steer) <= TOL_STRAIGHT else 0.0  # 應直行
+
+TOL_ALIGN, TOL_STRAIGHT = 6.0, 3.0</pre>
+
+<h2>7. 邊界情況</h2>
+<table>
+<tr><th>情況</th><th>處置</th></tr>
+<tr><td>整圈幾乎無彎 / <code>_ENTRIES</code> 為空</td><td>找不到彎 → 視為直行需求：<code>|steering| ≤ 3°</code> 給 1.0。</td></tr>
+<tr><td>車正位於彎中</td><td><code>next_corner</code> 回傳當前所在彎；T 仍由支撐切線求得（會落在前段邊界）。</td></tr>
+<tr><td>支撐測試找不到唯一點（共線/雜訊）</td><td>退化為取 apex 折線中點，保證有 T、不丟例外。</td></tr>
+<tr><td>倒著開 <code>is_reversed</code></td><td>env 已在倒車時終止 episode；本獎勵照常計算（不另外處理）。</td></tr>
+<tr><td>離道 <code>is_offtrack</code></td><td><b>純轉向項不含 on-track</b>；離道由 env 的 off-track 終止自然懲罰。</td></tr>
+</table>
+
+<div class="note warn">
+<b>純轉向項的已知取捨（A 案，使用者拍板）：</b>本獎勵<b>不含</b>前進或貼線誘因。env 在「全輪離道」會終止 episode（離道有自然懲罰），
+但沒有前進獎勵 → 理論上車可能慢速或原地微調騙取直行/修正獎勵。<b>建議實戰時把本獎勵與速度／進度獎勵相加</b>，
+本項專責「轉向方向」的塑形。
+</div>
+
+<h2>8. 檔案與整合</h2>
+<ul>
+<li>新增 <code>reward_functions/Tangent Apex.py</code>（暫名）—— 單檔、零外部相依，符合現有 reward 慣例（module-level 快取 + <code>reward_function(params)</code>）。</li>
+<li>透過「獎勵函數」分頁 / <code>list_reward_functions()</code> 自動被建模精靈選用，無需改 UI。</li>
+<li>用 <code>topracer/reward/verify.py</code> 的代表性 params 通過 <code>verify_reward_source</code>（語法 + 一次呼叫不丟例外）。</li>
+</ul>
+
+<h2>9. 驗收測試</h2>
+<table>
+<tr><th>#</th><th>測試</th><th>預期</th></tr>
+<tr><td class="c">1</td><td>左彎、車頭在 T 右方（<code>e=+15°</code>）、<code>steering=+12°</code></td><td class="c">1.0</td></tr>
+<tr><td class="c">2</td><td>同上但 <code>steering=−12°</code>（轉錯邊）</td><td class="c">0.0</td></tr>
+<tr><td class="c">3</td><td>同上但 <code>steering=0°</code>（對不準卻不修正）</td><td class="c">0.0</td></tr>
+<tr><td class="c">4</td><td>已對準（<code>|e|≤6°</code>）、<code>steering=0°</code></td><td class="c">1.0</td></tr>
+<tr><td class="c">5</td><td>已對準但 <code>steering=+20°</code>（對準卻轉彎）</td><td class="c">0.0</td></tr>
+<tr><td class="c">6</td><td>右彎、<code>e=−15°</code>、<code>steering=−12°</code></td><td class="c">1.0</td></tr>
+<tr><td class="c">7</td><td><code>build_cache</code> 在 2018 中線上回傳 <code>_LEFT/_RIGHT/_ENTRIES</code> 非空、<code>len(_APEX)=Σ彎長</code></td><td class="c">通過</td></tr>
+<tr><td class="c">8</td><td>左彎 apex 點落在 inner 側、右彎 apex 點落在 outer 側（自動選邊正確）</td><td class="c">通過</td></tr>
+<tr><td class="c">9</td><td><code>verify_reward_source</code> 對本檔回傳 ok</td><td class="c">通過</td></tr>
+</table>
+
+<h2>10. 參數一覽</h2>
+<table>
+<tr><th>名稱</th><th>值</th><th>意義</th></tr>
+<tr><td><code>TOL_ALIGN</code></td><td class="c">6.0°</td><td>對準死區；<code>|e|≤</code> 此值算已對準（應直行）</td></tr>
+<tr><td><code>TOL_STRAIGHT</code></td><td class="c">3.0°</td><td>直行帶；<code>|steering|≤</code> 此值算沒在轉</td></tr>
+<tr><td><code>eps</code></td><td class="c">0.15</td><td>彎道偵測曲率門檻（<code>turn3</code>）</td></tr>
+<tr><td>獎勵值</td><td class="c">1.0 / 0.0</td><td>二元：方向對 / 沒做對</td></tr>
+</table>
+
+<p class="sub" style="margin-top:40px">— 規格書結束。下一步：以 writing-plans 展開 TDD 實作計畫。</p>
+
+</div>
+</body>
+</html>
