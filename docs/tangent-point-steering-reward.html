@@ -181,38 +181,52 @@ def tangent_point(P, B, left_turn):
 e = normalize_deg( bearing - heading )       # (-180, 180]，正=切點在車頭左方</pre>
 
 <figure class="fig">
-<svg viewBox="0 0 720 360" width="100%" style="max-width:720px">
+<svg viewBox="0 0 720 330" width="100%" style="max-width:720px">
   <defs>
     <marker id="g1" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#2ca02c"/></marker>
     <marker id="g2" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#a06cff"/></marker>
     <marker id="g3" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#e0a000"/></marker>
   </defs>
-  <!-- track edges of a left corner -->
-  <path d="M120,330 L360,330 Q560,330 600,150 Q612,80 560,40" fill="none" stroke="#3a4150" stroke-width="3"/>
-  <path d="M120,250 L360,250 Q470,250 500,150 Q512,110 470,86" fill="none" stroke="#1f77b4" stroke-width="3"/>
-  <text x="505" y="150" fill="#1f77b4" font-size="13">內側邊界（apex 側）</text>
-  <text x="610" y="150" fill="#3a4150" font-size="13" stroke="#9aa4b2" stroke-width="0.2">外側</text>
-  <!-- car P -->
+  <!-- asphalt fill (left corner: straight then turns up/left) -->
+  <path d="M70,150 L380,150 Q448,158 458,108 Q464,66 432,48 L520,34 Q590,56 580,138 Q566,255 432,255 L70,255 Z" fill="#12151c"/>
+  <!-- inner (apex-side) boundary -->
+  <path d="M70,150 L380,150 Q448,158 458,108 Q464,66 432,48" fill="none" stroke="#1f77b4" stroke-width="3"/>
+  <!-- outer boundary -->
+  <path d="M70,255 L432,255 Q566,255 580,138 Q590,56 520,34" fill="none" stroke="#6b7686" stroke-width="2.5"/>
+  <text x="232" y="143" fill="#1f77b4" font-size="13">內側邊界（apex 側）</text>
+  <text x="120" y="276" fill="#6b7686" font-size="13">外側邊界</text>
+  <text x="466" y="112" fill="#9aa4b2" font-size="12">apex（最深處）</text>
+
+  <!-- car: top-down box + 4 wheels, heading +x (horizontal) -->
   <g>
-    <circle cx="200" cy="290" r="7" fill="#fff"/>
-    <text x="180" y="285" fill="#fff" font-size="14">P 車</text>
-    <!-- heading (slightly right of T) -->
-    <line x1="200" y1="290" x2="470" y2="250" stroke="#a06cff" stroke-width="2.5" marker-end="url(#g2)"/>
-    <text x="330" y="262" fill="#a06cff" font-size="13">車頭 heading</text>
-    <!-- sight to T -->
-    <line x1="200" y1="290" x2="500" y2="150" stroke="#2ca02c" stroke-width="2.5" marker-end="url(#g1)" stroke-dasharray="2 0"/>
-    <text x="360" y="205" fill="#2ca02c" font-size="13">視線 P→T</text>
+    <rect x="156" y="183" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="156" y="223" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="178" y="183" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="178" y="223" width="16" height="7" rx="2" fill="#0c0e13" stroke="#000"/>
+    <rect x="147" y="188" width="56" height="34" rx="5" fill="#aeb8c6" stroke="#2a2f3a" stroke-width="1.5"/>
+    <polygon points="203,196 203,214 217,205" fill="#a06cff"/>
+    <text x="138" y="252" fill="#fff" font-size="13">車（俯視）</text>
   </g>
-  <!-- tangent point -->
-  <circle cx="500" cy="150" r="6" fill="#2ca02c"/>
-  <text x="510" y="146" fill="#2ca02c" font-size="14">T 切點</text>
-  <!-- e angle wedge -->
-  <path d="M250,283 A 56 56 0 0 0 247 261" fill="none" stroke="#e0a000" stroke-width="2"/>
-  <text x="258" y="250" fill="#e0a000" font-size="14">e</text>
+
+  <!-- heading (horizontal) -->
+  <line x1="217" y1="205" x2="352" y2="205" stroke="#a06cff" stroke-width="2.5" marker-end="url(#g2)"/>
+  <text x="250" y="224" fill="#a06cff" font-size="13">車頭 heading（水平）</text>
+  <!-- sight line = tangent, grazes the corner ENTRY -->
+  <line x1="210" y1="201" x2="380" y2="150" stroke="#2ca02c" stroke-width="2.5" marker-end="url(#g1)"/>
+  <text x="236" y="178" fill="#2ca02c" font-size="13">視線＝切線（擦過彎入口）</text>
+  <!-- tangent point at the entry -->
+  <circle cx="380" cy="150" r="6" fill="#2ca02c"/>
+  <text x="388" y="145" fill="#2ca02c" font-size="14" font-weight="bold">切點 T（彎入口）</text>
+  <!-- T slides toward apex as the car advances -->
+  <path d="M386,151 Q448,158 456,114" fill="none" stroke="#e0a000" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#g3)"/>
+  <!-- e angle wedge between heading and sight -->
+  <path d="M263,205 A46,46 0 0 0 261,190" fill="none" stroke="#e0a000" stroke-width="2"/>
+  <text x="270" y="197" fill="#e0a000" font-size="14">e</text>
   <!-- annotation -->
-  <text x="120" y="40" fill="#e6e6e6" font-size="14">本例：車頭（紫）在切點 T（綠）<tspan fill="#e0a000" font-weight="bold">右方</tspan> → <tspan fill="#e0a000">e &gt; 0</tspan> → 應 <tspan fill="#1f77b4" font-weight="bold">左轉</tspan></text>
+  <text x="70" y="30" fill="#e6e6e6" font-size="14">本例：車頭水平 → 切點 T 在車頭<tspan fill="#e0a000" font-weight="bold">左（上）方</tspan> → <tspan fill="#e0a000">e &gt; 0</tspan> → 應 <tspan fill="#1f77b4" font-weight="bold">左轉</tspan></text>
+  <text x="70" y="320" fill="#e0a000" font-size="12.5">切點隨車前進沿內側邊界滑向 apex → 出口（晚 apex）</text>
 </svg>
-<figcaption>圖 3 — 左彎的視線切點幾何。視線 P→T 支撐在內側邊界；車頭在 T 右方表示 e&gt;0，正確修正動作是左轉。</figcaption>
+<figcaption>圖 3 — 左彎的視線切點幾何。車（俯視方塊＋四輪）在接近段；視線＝切線只<b>擦過內側邊界的「彎入口」T</b>（不是 apex）。車頭在 T 右方 → e&gt;0 → 應左轉。<span style="color:#e0a000">虛線</span>：切點隨車前進沿邊界滑向 apex。</figcaption>
 </figure>
 
 <h2>5. 必要動作與獎勵（核心）</h2>
