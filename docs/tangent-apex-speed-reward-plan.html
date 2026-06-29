@@ -1,0 +1,289 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>切點＋區間速度獎勵 — TDD 實作計畫</title><style>:root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;--blue:#1f77b4;--red:#d62728;--green:#2ca02c;--amber:#e0a000;--line:#2a2f3a;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 22px 80px}h1{font-size:25px;margin:0 0 6px}h2{font-size:20px;margin:32px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:#fff}.sub{color:var(--muted);margin:0 0 8px}
+code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff;font-family:"SF Mono",Menlo,Consolas,monospace}
+pre{background:#0c0e13;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.5;font-family:"SF Mono",Menlo,Consolas,monospace}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}th{background:#1d212a;color:#fff}
+.fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0;text-align:center}.fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+.taskcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 20px 18px;margin:16px 0}
+.tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+.note{border-left:3px solid var(--accent);padding:8px 14px;background:#15121d;border-radius:0 8px 8px 0;margin:12px 0}.warn{border-left:3px solid var(--amber);background:#1c1708}
+.badge{display:inline-block;min-width:30px;text-align:center;font-weight:bold;color:#0c0e13;border-radius:7px;padding:2px 9px;margin-right:8px;font-size:14px}
+.lbl{display:inline-block;font-size:11px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:14px 0 4px}
+.run{color:#9aa4b2;font-size:13px;margin:6px 0}.ok{color:#2ca02c}.bad{color:#d62728}
+ul{margin:6px 0;padding-left:20px}li{margin:3px 0}svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",monospace}</style></head><body><div class="wrap">
+<h1>切點轉向 ＋ 區間速度獎勵 · TDD 實作計畫</h1>
+<p class="sub">topRacer 獎勵函數實作計畫書 · 2026-06-28 · 6 個任務、紅→綠→提交 · 在 Tangent Apex 上加速度層</p>
+<p><span class="tag">合併一檔</span><span class="tag">純標準庫</span><span class="tag">TDD</span><span class="tag">6 任務</span><span class="tag">沿用切點幾何</span></p>
+<div class="note"><b>目標：</b>新增 <code>reward_functions/Tangent Apex Speed.py</code> = <b>切點轉向（0/1）＋ 區間速度（連續）相加</b>。
+先<b>複製</b> Tangent Apex（沿用全部幾何），再加 <code>braking_zone · exit_zone · speed_term</code>，並把 build_cache 多算兩張表、reward_function 改成相加。<br>
+<b>對應規格：</b><a href="https://itemhsu.github.io/topRacer-releases/tangent-apex-speed-reward.html" style="color:#a06cff">切點＋區間速度設計規格書</a>。</div>
+
+<h2>資料流</h2>
+<figure class="fig"><svg viewBox="0 0 720 412" width="100%" style="max-width:720px"><defs><marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs><rect x="210" y="18" width="300" height="46" rx="9" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="224" y="40" font-size="13.5" fill="#e6e6e6" font-family="monospace">params（每步）</text><text x="224" y="54" font-size="11.5" fill="#9aa4b2">x·y·heading·steering·speed·waypoints·closest_waypoints</text><rect x="150" y="92" width="420" height="54" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><text x="164" y="114" font-size="13.5" fill="#e6e6e6" font-family="monospace">build_cache(waypoints, track_width)</text><text x="164" y="136" font-size="11.5" fill="#9aa4b2">六張表 {left,right,entries,brake,exit,apex}・快取一次</text><circle cx="147" cy="95" r="13" fill="#171a21" stroke="#1f77b4" stroke-width="1.5"/><text x="147" y="99" text-anchor="middle" font-size="11" fill="#1f77b4" font-weight="bold">T1·T4</text><line x1="360" y1="64" x2="360" y2="90" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="360" y1="146" x2="200" y2="178" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="360" y1="146" x2="520" y2="178" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><rect x="60" y="180" width="300" height="54" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="74" y="202" font-size="13.5" fill="#e6e6e6" font-family="monospace">切點轉向（Tangent Apex）</text><text x="74" y="224" font-size="11.5" fill="#9aa4b2">next_corner → tangent_point → e = bearing−heading</text><circle cx="57" cy="183" r="13" fill="#171a21" stroke="#2ca02c" stroke-width="1.5"/><text x="57" y="187" text-anchor="middle" font-size="11" fill="#2ca02c" font-weight="bold">T1</text><rect x="60" y="256" width="300" height="48" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="74" y="278" font-size="13.5" fill="#e6e6e6" font-family="monospace">reward_for(e, steering)</text><text x="74" y="294" font-size="11.5" fill="#9aa4b2">→ steer ∈ {0,1}</text><circle cx="57" cy="259" r="13" fill="#171a21" stroke="#2ca02c" stroke-width="1.5"/><text x="57" y="263" text-anchor="middle" font-size="11" fill="#2ca02c" font-weight="bold">T1</text><line x1="210" y1="234" x2="210" y2="254" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><rect x="380" y="180" width="300" height="124" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.5"/><text x="394" y="202" font-size="13.5" fill="#e6e6e6" font-family="monospace">speed_term(speed, 區間)</text><text x="394" y="294" font-size="11.5" fill="#9aa4b2">煞車 peak@2.0 ・ 彎中 peak@2.5 ・ 出彎/直線 v=speed/4</text><circle cx="377" cy="183" r="13" fill="#171a21" stroke="#e0a000" stroke-width="1.5"/><text x="377" y="187" text-anchor="middle" font-size="11" fill="#e0a000" font-weight="bold">T5</text><rect x="190" y="346" width="340" height="52" rx="9" fill="#11141b" stroke="#a06cff" stroke-width="1.5"/><text x="204" y="368" font-size="13.5" fill="#e6e6e6" font-family="monospace">reward = W_STEER·steer + W_SPEED·v</text><text x="204" y="388" font-size="11.5" fill="#9aa4b2">A 案相加 ・ 範圍 0–2</text><circle cx="187" cy="349" r="13" fill="#171a21" stroke="#a06cff" stroke-width="1.5"/><text x="187" y="353" text-anchor="middle" font-size="11" fill="#a06cff" font-weight="bold">T6</text><line x1="210" y1="304" x2="300" y2="344" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="530" y1="304" x2="430" y2="344" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/></svg>
+<figcaption>圖 A — 每步資料流：build_cache（六張表）分出兩支：左＝切點轉向 steer∈{0,1}（沿用 Tangent Apex），右＝speed_term 算 v∈[0,1]，最後相加。徽章標出任務。</figcaption></figure>
+
+<h2>任務相依</h2>
+<figure class="fig"><svg viewBox="0 0 720 260" width="100%" style="max-width:720px"><defs><marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs><rect x="30" y="30" width="156" height="46" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="108.0" y="49" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">T1</text><text x="108.0" y="66" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">cp Tangent Apex</text><rect x="30" y="140" width="156" height="46" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.5"/><text x="108.0" y="159" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">T2</text><text x="108.0" y="176" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">braking_zone</text><rect x="250" y="140" width="156" height="46" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.5"/><text x="328.0" y="159" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">T3</text><text x="328.0" y="176" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">exit_zone</text><rect x="250" y="30" width="156" height="46" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.5"/><text x="328.0" y="49" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">T4</text><text x="328.0" y="66" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">build_cache +2</text><rect x="470" y="85" width="156" height="46" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.5"/><text x="548.0" y="104" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">T5</text><text x="548.0" y="121" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">speed_term</text><rect x="470" y="180" width="156" height="46" rx="9" fill="#11141b" stroke="#a06cff" stroke-width="1.5"/><text x="548.0" y="199" text-anchor="middle" font-size="13" fill="#a06cff" font-weight="bold">T6</text><text x="548.0" y="216" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">reward_function</text><line x1="186" y1="53" x2="250" y2="53" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="108" y1="140" x2="250" y2="75" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="328" y1="140" x2="328" y2="76" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="406" y1="53" x2="470" y2="95" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="548" y1="131" x2="548" y2="178" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><line x1="186" y1="53" x2="470" y2="190" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><text x="30" y="245" font-size="11.5" fill="#9aa4b2">綠：沿用切點轉向　·　黃：新增速度層　·　藍：擴充 build_cache（多 brake/exit）　·　紫：合併進入點</text></svg>
+<figcaption>圖 B — T1 複製沿用幾何；T2/T3 新增兩張區間表 → T4 併入 build_cache → T5 speed_term → T6 合併。T1 的轉向函式也被 T6 直接沿用。</figcaption></figure>
+
+<h2>每個任務的節奏</h2>
+<figure class="fig"><svg viewBox="0 0 460 175" width="100%" style="max-width:460px"><defs><marker id="t" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs>
+<rect x="20" y="58" width="120" height="46" rx="9" fill="#1c1010" stroke="#d62728" stroke-width="1.5"/><text x="80" y="78" text-anchor="middle" font-size="13" fill="#d62728" font-weight="bold">1 寫失敗測試</text><text x="80" y="95" text-anchor="middle" font-size="11" fill="#9aa4b2">跑→FAIL</text>
+<rect x="170" y="58" width="120" height="46" rx="9" fill="#0f1c10" stroke="#2ca02c" stroke-width="1.5"/><text x="230" y="78" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">2 最小實作</text><text x="230" y="95" text-anchor="middle" font-size="11" fill="#9aa4b2">跑→PASS</text>
+<rect x="320" y="58" width="120" height="46" rx="9" fill="#10141c" stroke="#1f77b4" stroke-width="1.5"/><text x="380" y="78" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">3 提交</text><text x="380" y="95" text-anchor="middle" font-size="11" fill="#9aa4b2">git commit</text>
+<line x1="140" y1="81" x2="168" y2="81" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#t)"/><line x1="290" y1="81" x2="318" y2="81" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#t)"/>
+<path d="M380,106 C380,148 80,148 80,106" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t)"/><text x="230" y="166" text-anchor="middle" font-size="11.5" fill="#9aa4b2">每個任務一輪</text></svg>
+<figcaption>圖 C — 每個任務一輪 TDD：先寫會失敗的測試 → 跑到 FAIL → 寫最小實作 → 跑到 PASS → 提交。</figcaption></figure>
+
+<h2>全域限制（每個任務都適用）</h2>
+<ul>
+<li>只動一個新檔 <code>reward_functions/Tangent Apex Speed.py</code>（檔名含空格，自動掃描）。只用標準庫 <code>math</code>；T1 直接複製 Tangent Apex，不 import 專案模組。</li>
+<li>必須通過 <code>verify_reward_source</code>（在 <code>SAMPLE_PARAMS</code> 上回傳數字；該 params 無彎、speed=2 → steer 走直行=1、v=直線 2/4=0.5、reward=1.5）。</li>
+<li>常數固定：<code>STRAIGHT_SPEED=4.0 · CORNER_SPEED=2.5 · BRAKE_SPEED=2.0 · TOP=STRAIGHT_SPEED · W_STEER=W_SPEED=1.0</code>。出彎＝全速，沿用直線公式 <code>speed/4</code>。</li>
+<li>區間：<code>braking_zone</code> e-3..e+2（6 點）；<code>exit_zone</code> end-2..end（3 點）。<code>speed_term</code> 優先序 <b>煞車 &gt; 出彎 &gt; 彎中 &gt; 直線</b>。</li>
+<li>合併：<code>reward = W_STEER·steer + W_SPEED·v</code>，範圍 0–2。</li>
+<li>測試在 <code>tests/reward/test_tangent_apex_speed.py</code>；用 <code>importlib</code> 依路徑載入含空格檔名；端到端測試前 <code>m._CACHE = None</code>。讀真實賽道測試以 <code>skipif</code> 保護（2018＝5 彎、尾點 42/56/70/90/110）。</li>
+<li>整輪：<code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code>。</li>
+</ul>
+
+<h2>任務（逐一 TDD）</h2>
+<div class="taskcard">
+<h2><span class="badge" style="background:#2ca02c">T1</span>從 Tangent Apex 複製（沿用幾何）</h2>
+<div class="lbl">檔案</div><ul><li>建立 <code>reward_functions/Tangent Apex Speed.py</code>（複製自 Tangent Apex）</li><li>建立 <code>tests/reward/test_tangent_apex_speed.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b>（沿用 <code>Tangent Apex</code> 已實作並通過審查的全部函式）</li><li><b>Produces：</b><ul><li>新檔含 <code>turn3 · classify_bends · find_entries · left_normal · corners_from · build_cache · next_corner · apex_polyline · cross · tangent_point · normalize_deg · bearing · reward_for · reward_function</code>（複製）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex_speed.py</code></div>
+<pre>import os
+import importlib.util
+
+import pytest
+
+_REWARD = os.path.join(os.path.dirname(__file__), "..", "..",
+                       "reward_functions", "Tangent Apex Speed.py")
+_NEEDS_TRACK = pytest.mark.skipif(
+    not os.path.exists("config/tracks/reinvent_base.npy"),
+    reason="2018 track not downloaded")
+
+
+def load():
+    spec = importlib.util.spec_from_file_location("tangent_apex_speed", _REWARD)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_reused_geometry_loads():
+    m = load()
+    assert m.reward_for(15, 12) == 1.0 and m.reward_for(0, 0) == 1.0
+    assert abs(m.normalize_deg(190) - (-170)) &lt; 1e-9
+
+
+@_NEEDS_TRACK
+def test_corners_reused_on_2018():
+    import numpy as np
+    m = load()
+    wp = [(float(x), float(y))
+          for x, y in np.load("config/tracks/reinvent_base.npy")[:, 0:2]]
+    c = m.build_cache(wp, 0.762)
+    assert [d for _, _, d in c["corners"]] == ["L", "R", "L", "L", "L"]</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code> ⟶ <span class="bad">FAIL</span>：FileNotFoundError（新 reward 檔還不存在）</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex Speed.py</code>（bash 指令）</div>
+<pre>cp "reward_functions/Tangent Apex.py" "reward_functions/Tangent Apex Speed.py"</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：幾何沿用、2018 五彎通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex Speed.py" tests/reward/test_tangent_apex_speed.py
+git commit -m "Tangent Apex Speed: scaffold from Tangent Apex (reuse geometry)"</pre>
+</div>
+<div class="taskcard">
+<h2><span class="badge" style="background:#e0a000">T2</span>煞車區間表 braking_zone</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex Speed.py</code></li><li>修改 <code>tests/reward/test_tangent_apex_speed.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b>（無）</li><li><b>Produces：</b><ul><li><code>braking_zone(entries, n)</code> → set，每個入口 <code>e-3..e+2</code> 共 6 點（環狀）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex_speed.py</code></div>
+<pre>def test_braking_zone():
+    m = load()
+    assert m.braking_zone([22], 119) == {19, 20, 21, 22, 23, 24}
+    assert m.braking_zone([0], 10) == {7, 8, 9, 0, 1, 2}</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'braking_zone'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex Speed.py</code>（Python）</div>
+<pre>def braking_zone(entries, n):
+    """煞車區：每個入口為中心連續 6 點 e-3..e+2。"""
+    z = set()
+    for e in entries:
+        for k in range(-3, 3):
+            z.add((e + k) % n)
+    return z</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex Speed.py" tests/reward/test_tangent_apex_speed.py
+git commit -m "Tangent Apex Speed: braking_zone (煞車區間表)"</pre>
+</div>
+<div class="taskcard">
+<h2><span class="badge" style="background:#e0a000">T3</span>出彎區間表 exit_zone</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex Speed.py</code></li><li>修改 <code>tests/reward/test_tangent_apex_speed.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b>（無）</li><li><b>Produces：</b><ul><li><code>exit_zone(corners, n)</code> → set，每個彎最後 3 點 <code>end-2..end</code>（環狀）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex_speed.py</code></div>
+<pre>def test_exit_zone():
+    m = load()
+    assert m.exit_zone([(22, 42, "L")], 119) == {40, 41, 42}
+    assert m.exit_zone([(0, 5, "R")], 10) == {3, 4, 5}</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'exit_zone'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex Speed.py</code>（Python）</div>
+<pre>def exit_zone(corners, n):
+    """出彎區：每個彎最後 3 點 end-2..end。"""
+    z = set()
+    for s, e, d in corners:
+        for k in (0, 1, 2):
+            z.add((e - k) % n)
+    return z</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex Speed.py" tests/reward/test_tangent_apex_speed.py
+git commit -m "Tangent Apex Speed: exit_zone (出彎區間表)"</pre>
+</div>
+<div class="taskcard">
+<h2><span class="badge" style="background:#1f77b4">T4</span>build_cache 多算 brake / exit 兩張表</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex Speed.py</code>（編輯既有 build_cache 的 return）</li><li>修改 <code>tests/reward/test_tangent_apex_speed.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b><code>braking_zone</code>（T2）· <code>exit_zone</code>（T3）· 既有 <code>build_cache</code></li><li><b>Produces：</b><ul><li><code>build_cache(...)</code> 回傳 dict 多兩鍵：<code>"brake"</code>（煞車區 set）、<code>"exit"</code>（出彎區 set）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex_speed.py</code></div>
+<pre>@_NEEDS_TRACK
+def test_build_cache_has_brake_and_exit():
+    import numpy as np
+    m = load()
+    wp = [(float(x), float(y))
+          for x, y in np.load("config/tracks/reinvent_base.npy")[:, 0:2]]
+    c = m.build_cache(wp, 0.762)
+    assert 22 in c["brake"] and 19 in c["brake"]
+    for tail in (42, 56, 70, 90, 110):
+        assert tail in c["exit"]</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code> ⟶ <span class="bad">FAIL</span>：KeyError: 'brake'（build_cache 還沒回傳 brake/exit）</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex Speed.py</code>（Python）</div><div class="note">把 build_cache 結尾既有的 <code>return {...}</code> 整段換成上面這段（多了 brake / exit 兩鍵）。braking_zone / exit_zone 雖定義在檔尾，呼叫期才解析，順序無妨。</div>
+<pre>    return {"left": left, "right": right, "entries": entries,
+            "corners": corners, "apex": apex, "n": n,
+            "brake": braking_zone(entries, n), "exit": exit_zone(corners, n)}</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：2018 的 brake/exit 內容正確</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex Speed.py" tests/reward/test_tangent_apex_speed.py
+git commit -m "Tangent Apex Speed: build_cache adds brake + exit tables"</pre>
+</div>
+<div class="taskcard">
+<h2><span class="badge" style="background:#e0a000">T5</span>速度常數 ＋ speed_term</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex Speed.py</code></li><li>修改 <code>tests/reward/test_tangent_apex_speed.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b><code>build_cache</code> 的六鍵快取（T4）</li><li><b>Produces：</b><ul><li>常數 <code>STRAIGHT_SPEED=4.0 · CORNER_SPEED=2.5 · BRAKE_SPEED=2.0 · TOP · W_STEER · W_SPEED</code></li><li><code>_clip01(x)</code> → 夾 [0,1]</li><li><code>speed_term(speed, i, c)</code> → v∈[0,1]（優先序 煞車 &gt; 出彎 &gt; 彎中 &gt; 直線）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex_speed.py</code></div>
+<pre>def _cache():
+    return {"left": set(range(28, 41)), "right": set(), "entries": [28],
+            "corners": [(28, 40, "L")], "apex": {}, "n": 50,
+            "brake": {26, 27, 28, 29, 30, 31}, "exit": {38, 39, 40}}
+
+
+def test_speed_term_zones_and_precedence():
+    m = load()
+    c = _cache()
+    assert m.speed_term(4.0, 5, c) == 1.0                  # straight: speed/4
+    assert m.speed_term(2.0, 5, c) == 0.5
+    assert m.speed_term(2.0, 28, c) == 1.0                 # 28 in brake&amp;corner -&gt; brake @2.0
+    assert m.speed_term(2.5, 34, c) == 1.0                 # corner peak @2.5
+    assert abs(m.speed_term(4.0, 34, c) - 0.625) &lt; 1e-9    # corner, too fast
+    assert m.speed_term(4.0, 38, c) == 1.0                 # 38 in exit&amp;corner -&gt; exit speed/4
+    assert abs(m.speed_term(2.5, 38, c) - 0.625) &lt; 1e-9    # exit uses speed/4, not 2.5 peak
+    assert m.speed_term(10.0, 38, c) == 1.0                # clip
+    assert m.speed_term(0.0, 5, c) == 0.0</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: has no attribute 'speed_term'</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex Speed.py</code>（Python）</div>
+<pre>STRAIGHT_SPEED, CORNER_SPEED, BRAKE_SPEED = 4.0, 2.5, 2.0   # 對齊動作空間 speed_high
+TOP = STRAIGHT_SPEED          # 速度項正規化分母（出彎也用此式）
+W_STEER = W_SPEED = 1.0       # A 案：相加
+
+
+def _clip01(x):
+    return 0.0 if x &lt; 0.0 else (1.0 if x &gt; 1.0 else x)
+
+
+def speed_term(speed, i, c):
+    """區域化連續速度項 v∈[0,1]。優先序 煞車 &gt; 出彎 &gt; 彎中 &gt; 直線。"""
+    if i in c["brake"]:
+        return _clip01(1.0 - abs(speed - BRAKE_SPEED) / TOP)    # @2.0
+    if i in c["exit"]:
+        return _clip01(speed / STRAIGHT_SPEED)                  # 後三點全速出彎
+    if i in c["left"] or i in c["right"]:
+        return _clip01(1.0 - abs(speed - CORNER_SPEED) / TOP)   # @2.5
+    return _clip01(speed / STRAIGHT_SPEED)                      # 直線</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全部通過（含優先序與 clip）</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex Speed.py" tests/reward/test_tangent_apex_speed.py
+git commit -m "Tangent Apex Speed: speed constants + speed_term"</pre>
+</div>
+<div class="taskcard">
+<h2><span class="badge" style="background:#a06cff">T6</span>reward_function：steer + v 合併</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>reward_functions/Tangent Apex Speed.py</code>（替換複製來的 reward_function）</li><li>修改 <code>tests/reward/test_tangent_apex_speed.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b><code>build_cache · next_corner · apex_polyline · tangent_point · bearing · normalize_deg · reward_for</code>（沿用）· <code>speed_term · W_STEER · W_SPEED</code>（T5）· <code>_CACHE</code></li><li><b>Produces：</b><ul><li><code>reward_function(params)</code> → float：<code>W_STEER·steer + W_SPEED·v</code>（範圍 0–2）</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/reward/test_tangent_apex_speed.py</code></div>
+<pre>from topracer.reward.verify import verify_reward_source, SAMPLE_PARAMS
+
+
+def test_passes_verifier():
+    ok, msg = verify_reward_source(open(_REWARD, encoding="utf-8").read())
+    assert ok, msg
+
+
+def test_combined_straight_topspeed():
+    m = load()
+    m._CACHE = {"left": set(), "right": set(), "entries": [], "corners": [],
+                "apex": {}, "n": 8, "brake": set(), "exit": set()}
+    p = {"x": 0.0, "y": 0.0, "heading": 0.0, "steering_angle": 0.0, "speed": 4.0,
+         "track_width": 0.6, "waypoints": [(0.0, 0.0), (1.0, 0.0)],
+         "closest_waypoints": [1, 2]}
+    assert m.reward_function(p) == 2.0          # steer 1 + v 1
+
+
+def test_combined_brake_overspeed():
+    m = load()
+    m._CACHE = {"left": {2}, "right": set(), "entries": [2], "corners": [(2, 4, "L")],
+                "apex": {2: (0.0, 1.0), 3: (0.5, 1.2), 4: (1.0, 1.0)}, "n": 8,
+                "brake": {2}, "exit": set()}
+    p = {"x": 0.0, "y": 0.0, "heading": 0.0, "steering_angle": 15.0, "speed": 4.0,
+         "track_width": 0.6, "waypoints": [(0.0, 0.0), (1.0, 0.0)],
+         "closest_waypoints": [1, 2]}
+    # corner left, e=45 -&gt; steer=1 ; nxt=2 in brake, speed 4 -&gt; v=1-|4-2|/4=0.5
+    assert m.reward_function(p) == 1.5</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/reward/test_tangent_apex_speed.py -v</code> ⟶ <span class="bad">FAIL</span>：驗 verifier 失敗或合併值不對（複製來的 reward_function 只回 steer）</div>
+<div class="lbl">② 最小實作 → <code>reward_functions/Tangent Apex Speed.py</code>（Python）</div><div class="note">把檔案裡<b>複製自 Tangent Apex 的 reward_function</b>（只回傳 steer 那版）整個換成上面這段。</div>
+<pre>def reward_function(params):
+    """切點轉向（0/1）＋ 區間速度（連續）相加。"""
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = build_cache(params["waypoints"], params["track_width"])
+    c = _CACHE
+    steering = float(params["steering_angle"])
+    speed = float(params["speed"])
+    _, nxt = params["closest_waypoints"]
+    corner = next_corner(int(nxt), c["corners"], c["n"])
+    if corner is None:
+        steer = reward_for(0.0, steering)
+    else:
+        P = (float(params["x"]), float(params["y"]))
+        T = tangent_point(P, apex_polyline(corner, c["apex"], c["n"]), corner[2] == "L")
+        e = normalize_deg(bearing(P, T) - float(params["heading"]))
+        steer = reward_for(e, steering)
+    v = speed_term(speed, int(nxt), c)
+    return W_STEER * steer + W_SPEED * v</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：全綠（含 verifier 與合併）</div>
+<div class="lbl">③ 提交</div>
+<pre>git add "reward_functions/Tangent Apex Speed.py" tests/reward/test_tangent_apex_speed.py
+git commit -m "Tangent Apex Speed: reward_function = steer + speed"</pre>
+</div>
+
+<h2>規格覆蓋對照</h2>
+<table>
+<tr><th>規格章節</th><th>對應任務</th></tr>
+<tr><td>§1 組成（沿用 Tangent Apex 全部函式）</td><td>T1（複製）</td></tr>
+<tr><td>§2 六張表（brake / exit）</td><td>T2 <code>braking_zone</code> · T3 <code>exit_zone</code> · T4 build_cache 併入</td></tr>
+<tr><td>§3 區間目標速 · §4 速度項 v（含優先序、出彎全速）</td><td>T5 <code>speed_term</code>＋常數</td></tr>
+<tr><td>§5 合併（A 案相加）· §6 流程</td><td>T6 <code>reward_function</code></td></tr>
+<tr><td>§7 邊界（無彎→直行、重疊優先序、clip）· §8 驗收 1–8</td><td>T5（區間/優先序/clip）· T6（合併/verifier）</td></tr>
+</table>
+
+<div class="note warn"><b>範圍提醒：</b>A 案相加 → 直線上轉向暫時不對仍能拿速度分（刻意，訊號穩）。要更嚴可改乘法閘門 <code>v·(0.3+0.7·steer)</code>，本計畫照規格走 A 案。</div>
+<p class="sub" style="margin-top:40px">— 計畫書結束。執行：subagent-driven-development 或 executing-plans。</p>
+</div></body></html>
