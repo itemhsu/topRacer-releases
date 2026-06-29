@@ -1,0 +1,158 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用 Claude for Education 教學生用 Claude — 高中職教師指南</title><style>
+:root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;--blue:#1f77b4;--green:#3aa657;--amber:#e0a000;--red:#d62728;--line:#2a2f3a;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.75 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+.wrap{max-width:920px;margin:0 auto;padding:34px 22px 90px}
+h1{font-size:27px;margin:0 0 6px}.sub{color:var(--muted);margin:0 0 10px}
+h2{font-size:21px;margin:38px 0 12px;padding-top:16px;border-top:1px solid var(--line);color:#fff}
+h3{font-size:16.5px;margin:20px 0 6px;color:#cdd6e2}
+code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff;font-family:Menlo,monospace;font-size:13px}
+a{color:var(--accent)}
+.fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:16px 0;text-align:center}.fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+.note{border-left:3px solid var(--accent);padding:10px 16px;background:#15121d;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{border-left:3px solid var(--amber);background:#1c1708}
+.prompt{background:#0c0e13;border:1px solid #2f3a2a;border-left:3px solid var(--green);border-radius:8px;padding:10px 14px;margin:8px 0;font-family:Menlo,monospace;font-size:13px;color:#d7e2c4;white-space:pre-wrap;line-height:1.5}
+.ptag{display:inline-block;font-size:11px;color:var(--green);border:1px solid #2f3a2a;border-radius:999px;padding:0 8px;margin-bottom:4px;font-family:-apple-system,"PingFang TC",sans-serif}
+.cl{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 20px 16px;margin:14px 0}
+.cl h3{color:#fff;border-bottom:1px solid var(--line);padding-bottom:6px}
+.cl ul{list-style:none;padding-left:0;margin:8px 0}
+.cl li{margin:7px 0;padding-left:30px;position:relative}
+.cl li::before{content:"☐";position:absolute;left:4px;top:-1px;color:var(--accent);font-size:17px}
+.act{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 20px 16px;margin:14px 0}
+.chip{display:inline-block;font-size:11.5px;padding:1px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-left:6px}
+ul,ol{padding-left:22px}li{margin:4px 0}
+.res a{display:inline-block;margin:3px 14px 3px 0}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}th,td{border:1px solid var(--line);padding:7px 10px;text-align:left}th{background:#1d212a;color:#fff}
+svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif}
+</style></head><body><div class="wrap">
+
+<h1>用 Claude for Education 教學生用 Claude</h1>
+<p class="sub">高中職教師實作指南 · 繁體中文 · 含課前準備清單 · 2026-06</p>
+
+<div class="note">
+<b>這份指南幫你做到一件事：</b>在課堂上帶學生把 Claude <b>用得好、用得負責</b>——不是教 AI 理論，而是給你<b>課前準備清單、一堂課的節奏、可直接用的活動與練習</b>。重點放在你最需要的<b>課前準備</b>。
+</div>
+
+<h2>1. 這份指南是給誰的</h2>
+<ul>
+<li><b>對象：</b>高中職任何科目的老師（國文、英文、數理、專業群科都適用）。</li>
+<li><b>不需要：</b>你不必先成為 AI 專家——指南把你要做的事拆成清單與步驟。</li>
+<li><b>目標：</b>讓學生學會「<b>把 AI 當思考夥伴</b>，而不是把思考外包給 AI」。</li>
+</ul>
+
+<h2>2. 認識 Claude for Education</h2>
+<p><b>Claude for Education</b> 是 Anthropic 為教育機構打造的 Claude 版本，核心特色：</p>
+<table>
+<tr><th>功能</th><th>對課堂的用途</th></tr>
+<tr><td><b>Learning Mode</b>（學習模式）</td><td>用<b>蘇格拉底式提問引導</b>學生推理，<b>不直接給答案</b>——培養獨立思考，避免「複製貼上」。</td></tr>
+<tr><td><b>Projects</b>（專案）</td><td>把課程教材、評分規準、範例集中在一個專案，讓對話有<b>一致脈絡</b>。</td></tr>
+<tr><td>教師工具</td><td>產生<b>評分規準（rubric）</b>、給個別化回饋、設計課程與分難度題目。</td></tr>
+<tr><td>管理與分析</td><td>校方層級的存取管理與使用觀察（由學校 IT/行政設定）。</td></tr>
+</table>
+<div class="note warn">
+<b>取得方式（誠實說明）：</b>Claude for Education 主要面向<b>大學／機構</b>。高中職若校方<b>尚未導入</b>，實務上可改用 <code>claude.ai</code>（免費或 Pro），<b>一樣能套用本指南的原則</b>——在 prompt 裡明確要求 Claude「用提問引導、先別給答案」，就能手動重現 Learning Mode 的精神。下方所有活動兩種方案都適用。
+</div>
+
+<h2>3. 核心心法：AI Fluency 的「4 D's」</h2>
+<p>Anthropic 的 <b>AI Fluency</b> 框架用四項能力描述「把 AI 用得好」。把它當成你教學生的<b>骨架</b>——每個活動都對應其中一兩項：</p>
+<figure class="fig"><svg viewBox="0 0 720 220" width="100%" style="max-width:720px"><defs><marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker><marker id="am" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#e0a000"/></marker></defs>
+<text x="360" y="34" text-anchor="middle" font-size="16" fill="#fff" font-weight="bold">AI Fluency · 4 D's（用得好的四項能力）</text>
+<rect x="12" y="74" width="150" height="92" rx="10" fill="#11141b" stroke="#3aa657" stroke-width="1.6"/><text x="87" y="100" text-anchor="middle" font-size="15" fill="#3aa657" font-weight="bold">Delegation</text><text x="87" y="120" text-anchor="middle" font-size="13" fill="#e6e6e6">委派</text><text x="87" y="142" text-anchor="middle" font-size="10.5" fill="#9aa4b2">哪些任務交給 AI、哪些自己做</text>
+<rect x="192" y="74" width="150" height="92" rx="10" fill="#11141b" stroke="#1f77b4" stroke-width="1.6"/><text x="267" y="100" text-anchor="middle" font-size="15" fill="#1f77b4" font-weight="bold">Description</text><text x="267" y="120" text-anchor="middle" font-size="13" fill="#e6e6e6">描述</text><text x="267" y="142" text-anchor="middle" font-size="10.5" fill="#9aa4b2">清楚說明需求、情境、格式</text>
+<rect x="372" y="74" width="150" height="92" rx="10" fill="#11141b" stroke="#a06cff" stroke-width="1.6"/><text x="447" y="100" text-anchor="middle" font-size="15" fill="#a06cff" font-weight="bold">Discernment</text><text x="447" y="120" text-anchor="middle" font-size="13" fill="#e6e6e6">辨識</text><text x="447" y="142" text-anchor="middle" font-size="10.5" fill="#9aa4b2">批判評估輸出:對嗎?有偏誤?</text>
+<rect x="552" y="74" width="150" height="92" rx="10" fill="#11141b" stroke="#e0a000" stroke-width="1.6"/><text x="627" y="100" text-anchor="middle" font-size="15" fill="#e0a000" font-weight="bold">Diligence</text><text x="627" y="120" text-anchor="middle" font-size="13" fill="#e6e6e6">盡責</text><text x="627" y="142" text-anchor="middle" font-size="10.5" fill="#9aa4b2">查證、標來源、為結果負責</text>
+<line x1="162" y1="120" x2="190" y2="120" stroke="#9aa4b2" stroke-width="1.7" marker-end="url(#a)"/>
+<line x1="522" y1="120" x2="550" y2="120" stroke="#9aa4b2" stroke-width="1.7" marker-end="url(#a)"/>
+<path d="M342,106 C352,96 362,96 370,106" fill="none" stroke="#e0a000" stroke-width="2" marker-end="url(#am)"/>
+<path d="M372,150 C362,160 352,160 344,150" fill="none" stroke="#e0a000" stroke-width="2" marker-end="url(#am)"/>
+<text x="357" y="206" text-anchor="middle" font-size="12" fill="#e0a000">描述–辨識循環:不滿意 → 修改描述 → 再評估,反覆逼近</text></svg>
+<figcaption>圖 1 — 4 D's：委派、描述、辨識、盡責。中間<span style="color:#e0a000">「描述–辨識循環」</span>是日常最常用的一環。</figcaption></figure>
+<ul>
+<li><b>Delegation 委派：</b>判斷<b>哪些任務適合交給 AI</b>、哪些該自己做（思考、判斷、創意核心不外包）。</li>
+<li><b>Description 描述：</b>把需求、情境、格式<b>講清楚</b>——好的提示 = 一半的成果。</li>
+<li><b>Discernment 辨識：</b><b>批判地評估</b>輸出：正確嗎？有偏誤或幻覺嗎？符合需求嗎？</li>
+<li><b>Diligence 盡責：</b><b>查證、標註來源、為最終結果負責</b>；遵守誠信規範。</li>
+</ul>
+
+<h2>4. 🎯 老師課前準備清單</h2>
+<p>開課前把這份清單跑過一遍（兩種方案都適用）：</p>
+<div class="cl"><h3>A. 存取與政策</h3><ul>
+<li>確認可用方案：校方是否已導入 Claude for Education；若無，改用 <code>claude.ai</code>（免費／Pro）。</li>
+<li>讀過並遵守<b>校方／課程的 AI 使用與資料政策</b>。</li>
+<li>確認學生有帳號或裝置；準備<b>無帳號的替代</b>（老師單機螢幕示範、分組共用一台）。</li>
+</ul></div>
+<div class="cl"><h3>B. 教學設計</h3><ul>
+<li>開啟 <b>Learning Mode</b>（或在 prompt 要求「引導而非給答案」）。</li>
+<li>建立課程 <b>Project</b>，放教材、規準、範例，讓對話有一致脈絡。</li>
+<li>寫好今天的<b>學習目標</b>，並對應到一個 4D 能力。</li>
+<li>準備 <b>1 個示範 prompt ＋ 1 個「反例」</b>（壞 prompt → 讓學生看差別）。</li>
+<li>備好<b>評量 rubric</b>，把「會用 AI」變成可評的指標（見 §8）。</li>
+</ul></div>
+<div class="cl"><h3>C. 風險與誠信</h3><ul>
+<li>訂清楚：<b>哪些步驟可用 AI、哪些必須自己做、如何標註</b>。</li>
+<li>提醒<b>隱私</b>：不上傳個資、他人作品、未公開或機敏資料。</li>
+<li>準備一個<b>「查證幻覺」示範</b>——讓學生親眼看到 AI 也會出錯。</li>
+</ul></div>
+<div class="cl"><h3>D. 老師自測（最容易被略過、卻最有用）</h3><ul>
+<li><b>自己先完整跑一遍</b>學生要做的活動。</li>
+<li>估時間、預想學生會卡在哪、先寫好幾個<b>引導問題</b>。</li>
+</ul></div>
+
+<h2>5. 一堂課的節奏範本</h2>
+<figure class="fig"><svg viewBox="0 0 720 145" width="100%" style="max-width:720px"><text x="360" y="26" text-anchor="middle" font-size="15" fill="#fff" font-weight="bold">一堂課的節奏（約 45 分鐘範本）</text><rect x="20.0" y="50" width="69.6" height="54" rx="8" fill="#11141b" stroke="#3aa657" stroke-width="1.6"/><text x="54.8" y="74" text-anchor="middle" font-size="12.5" fill="#3aa657" font-weight="bold">暖身</text><text x="54.8" y="92" text-anchor="middle" font-size="11" fill="#9aa4b2">5 分</text><rect x="95.6" y="50" width="145.1" height="54" rx="8" fill="#11141b" stroke="#1f77b4" stroke-width="1.6"/><text x="168.1" y="74" text-anchor="middle" font-size="12.5" fill="#1f77b4" font-weight="bold">教師示範</text><text x="168.1" y="92" text-anchor="middle" font-size="11" fill="#9aa4b2">10 分</text><rect x="246.7" y="50" width="296.2" height="54" rx="8" fill="#11141b" stroke="#a06cff" stroke-width="1.6"/><text x="394.8" y="74" text-anchor="middle" font-size="12.5" fill="#a06cff" font-weight="bold">學生動手 (4D)</text><text x="394.8" y="92" text-anchor="middle" font-size="11" fill="#9aa4b2">20 分</text><rect x="548.9" y="50" width="99.8" height="54" rx="8" fill="#11141b" stroke="#e0a000" stroke-width="1.6"/><text x="598.8" y="74" text-anchor="middle" font-size="12.5" fill="#e0a000" font-weight="bold">分享</text><text x="598.8" y="92" text-anchor="middle" font-size="11" fill="#9aa4b2">7 分</text><rect x="654.7" y="50" width="39.3" height="54" rx="8" fill="#11141b" stroke="#d62728" stroke-width="1.6"/><text x="674.3" y="74" text-anchor="middle" font-size="12.5" fill="#d62728" font-weight="bold">反思</text><text x="674.3" y="92" text-anchor="middle" font-size="11" fill="#9aa4b2">3 分</text><text x="20" y="132" font-size="11.5" fill="#9aa4b2">「學生動手」是主菜:讓學生自己用 4D 操作 Claude,老師走動觀察、提問,而不是全班看老師示範。</text></svg>
+<figcaption>圖 2 — 約 45 分鐘的範本。把時間<b>留給學生動手</b>，老師的角色是走動、提問、收斂。</figcaption></figure>
+
+<h2>6. 課堂活動範例（通用，可套任何科目）</h2>
+
+<div class="act"><h3>活動 A — 用 Learning Mode 自己解一題 <span class="chip">Delegation · Description</span></h3>
+<p><b>目標：</b>體驗「AI 引導我思考」而不是「AI 給我答案」。</p>
+<ol><li>學生挑一題（數學、物理、文法、程式皆可）。</li>
+<li>用下面的 prompt 請 Claude 引導，<b>學生要自己回答每一步</b>。</li>
+<li>結束後寫一句：「我卡在哪、是哪個提問點通了。」</li></ol>
+<div class="prompt"><span class="ptag">示範 prompt</span><br>請用蘇格拉底式提問引導我自己解出這一題,不要直接給答案。每次只問我一個問題,等我回答後再問下一個;如果我答錯,提示我重想,不要替我寫出解法。題目:______</div>
+</div>
+
+<div class="act"><h3>活動 B — 寫作／報告改進（描述–辨識循環） <span class="chip">Description · Discernment</span></h3>
+<p><b>目標：</b>練習「修改描述 → 再評估」的反覆循環，學生保留主導權。</p>
+<ol><li>學生貼上自己的一段草稿。</li>
+<li>請 Claude<b>只指出問題並反問</b>，不代寫。</li>
+<li>學生依回饋改一版，再請 Claude 評估——重複 2～3 輪。</li></ol>
+<div class="prompt"><span class="ptag">示範 prompt</span><br>這是我寫的一段:『______』。請先指出其中 2 個最弱的地方,並各問我一個問題,讓我自己改進。先不要幫我重寫,也不要給範例答案。</div>
+</div>
+
+<div class="act"><h3>活動 C — 批判查證一段 AI 輸出 <span class="chip">Discernment · Diligence</span></h3>
+<p><b>目標：</b>看見 AI 會犯錯，建立「查證後才採用」的習慣。</p>
+<ol><li>老師（或學生）先讓 Claude 產生一段說明某主題的文字。</li>
+<li>用下面 prompt 找出<b>需查證的宣稱</b>，再請學生<b>用課本／可靠來源實際查證</b>。</li>
+<li>標出哪些正確、哪些有誤或誇大。</li></ol>
+<div class="prompt"><span class="ptag">示範 prompt</span><br>以下是一段對「______」的說明。請列出其中 3 個最需要查證或可能不正確的宣稱,並說明為什麼需要查證。不要直接判斷對錯,讓我自己去查。</div>
+</div>
+
+<h2>7. 學生練習單（可印）</h2>
+<ol>
+<li><b>委派判斷：</b>列出今天作業的 5 個步驟，標出哪些「可用 AI 協助」、哪些「必須自己完成」，並說明理由。</li>
+<li><b>描述升級：</b>把一個爛 prompt（例：「幫我寫報告」）改寫成好的 prompt（含主題、對象、長度、格式、限制），比較兩次輸出差別。</li>
+<li><b>抓幻覺：</b>找出 Claude 一段回答中 1 個你查證後發現有問題的地方，附上你的查證來源。</li>
+</ol>
+
+<h2>8. 學術誠信與負責任使用</h2>
+<ul>
+<li><b>標註：</b>規定學生註明「哪裡用了 AI、怎麼用」；把它當成像查字典一樣的公開工具，而非隱瞞的捷徑。</li>
+<li><b>查證：</b>AI 會「一本正經地說錯話」（幻覺）——採用前一定查證。</li>
+<li><b>隱私：</b>不上傳個資、他人作品、未公開或機敏資料。</li>
+<li><b>不外包思考：</b>核心判斷、創意、論證要由學生自己完成；AI 是夥伴不是代工。</li>
+<li><b>遵守規範：</b>以校方與該科課程的規定為準，課前講清楚界線。</li>
+</ul>
+
+<h2>9. 官方資源</h2>
+<p class="res">
+<a href="https://www.anthropic.com/education">Claude for Education 總覽</a>
+<a href="https://www.anthropic.com/news/introducing-claude-for-education">介紹 Claude for Education</a>
+<a href="https://www.anthropic.com/news/advancing-claude-for-education">Advancing Claude for Education（Learning Mode 等）</a>
+<a href="https://www.anthropic.com/learn/claude-for-you">AI Fluency 課程（4 D's）</a>
+<a href="https://www.anthropic.com/news/anthropic-education-report-how-educators-use-claude">教育報告：教師如何使用 Claude</a>
+</p>
+
+<p class="sub" style="margin-top:36px">本頁為通用教學指南；專有名詞（Learning Mode、4 D's）保留英文以便對照 Anthropic 原文。內容依 2026-06 公開資料整理。</p>
+</div></body></html>
