@@ -1,0 +1,175 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny CNN 特徵抽取器 — TDD 實作計畫</title><style>:root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;--blue:#1f77b4;--green:#2ca02c;--red:#d62728;--amber:#e0a000;--line:#2a2f3a;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 22px 80px}h1{font-size:25px;margin:0 0 6px}h2{font-size:20px;margin:32px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:#fff}.sub{color:var(--muted);margin:0 0 8px}
+code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff;font-family:Menlo,monospace;font-size:13px}
+pre{background:#0c0e13;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.5;font-family:Menlo,monospace}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}th{background:#1d212a;color:#fff}
+.fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0;text-align:center}.fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+.taskcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 20px 18px;margin:16px 0}
+.tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+.note{border-left:3px solid var(--accent);padding:8px 14px;background:#15121d;border-radius:0 8px 8px 0;margin:12px 0}.warn{border-left:3px solid var(--amber);background:#1c1708}
+.badge{display:inline-block;min-width:30px;text-align:center;font-weight:bold;color:#0c0e13;border-radius:7px;padding:2px 9px;margin-right:8px;font-size:14px}
+.lbl{display:inline-block;font-size:11px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:14px 0 4px}
+.run{color:#9aa4b2;font-size:13px;margin:6px 0}.ok{color:#2ca02c}.bad{color:#d62728}ul{margin:6px 0;padding-left:20px}li{margin:3px 0}svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",monospace}</style></head><body><div class="wrap">
+<h1>Tiny CNN 特徵抽取器（縮小 DeepRacer 策略網路）· TDD 實作計畫</h1>
+<p class="sub">topRacer · 2026-06-30 · 3 個任務 · opt-in 旗標、保持原解析度 · 砍掉 flatten→FC 大頭</p>
+<p><span class="tag">opt-in</span><span class="tag">保持解析度</span><span class="tag">depthwise + GAP</span><span class="tag">~200× 少參數</span><span class="tag">3 任務 TDD</span></p>
+<div class="note"><b>目標：</b>提供一個<b>可選</b>的迷你 CNN 取代預設 NatureCNN：<b>大 stride 快速壓空間 → 16-32-32 depthwise → GAP → 128 FC</b>，
+保持原輸入解析度、主要砍掉 <code>flatten→512 FC</code> 的參數大頭（~6.5M → ~7.3k）。預設仍 NatureCNN，不動現有模型。</div>
+<h2>架構對比</h2>
+<figure class="fig"><svg viewBox="0 0 720 375" width="100%" style="max-width:720px"><defs><marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs><text x="180" y="22" text-anchor="middle" font-size="14" fill="#d62728" font-weight="bold">NatureCNN (預設)</text><text x="540" y="22" text-anchor="middle" font-size="14" fill="#2ca02c" font-weight="bold">TinyCNN (本計畫)</text><rect x="60" y="40" width="240" height="44" rx="8" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="180.0" y="59" text-anchor="middle" font-size="12" fill="#6b7686" font-weight="bold">conv 32, k8 s4</text><text x="180.0" y="75" text-anchor="middle" font-size="10" fill="#9aa4b2">→ 32×29×39</text><rect x="60" y="100" width="240" height="44" rx="8" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="180.0" y="119" text-anchor="middle" font-size="12" fill="#6b7686" font-weight="bold">conv 64, k4 s2</text><text x="180.0" y="135" text-anchor="middle" font-size="10" fill="#9aa4b2">→ 64×13×18</text><line x1="180" y1="90" x2="180" y2="99" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><rect x="60" y="160" width="240" height="44" rx="8" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="180.0" y="179" text-anchor="middle" font-size="12" fill="#6b7686" font-weight="bold">conv 64, k3 s1</text><text x="180.0" y="195" text-anchor="middle" font-size="10" fill="#9aa4b2">→ 64×11×16</text><line x1="180" y1="150" x2="180" y2="159" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><rect x="60" y="220" width="240" height="44" rx="8" fill="#11141b" stroke="#d62728" stroke-width="1.5"/><text x="180.0" y="239" text-anchor="middle" font-size="12" fill="#d62728" font-weight="bold">flatten → 11264</text><text x="180.0" y="255" text-anchor="middle" font-size="10" fill="#9aa4b2">參數大頭</text><line x1="180" y1="210" x2="180" y2="219" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><rect x="60" y="280" width="240" height="44" rx="8" fill="#11141b" stroke="#d62728" stroke-width="1.5"/><text x="180.0" y="299" text-anchor="middle" font-size="12" fill="#d62728" font-weight="bold">FC 512</text><text x="180.0" y="315" text-anchor="middle" font-size="10" fill="#9aa4b2">≈ 5.8M 參數</text><line x1="180" y1="270" x2="180" y2="279" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><text x="180" y="360" text-anchor="middle" font-size="13" fill="#d62728" font-weight="bold">≈ 6.5M+ 參數</text><rect x="420" y="40" width="240" height="44" rx="8" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="540.0" y="59" text-anchor="middle" font-size="12" fill="#6b7686" font-weight="bold">conv 16, k8 s4</text><text x="540.0" y="75" text-anchor="middle" font-size="10" fill="#9aa4b2">→ 16×29×39</text><rect x="420" y="100" width="240" height="44" rx="8" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="540.0" y="119" text-anchor="middle" font-size="12" fill="#2ca02c" font-weight="bold">dwsep 16→32 s2</text><text x="540.0" y="135" text-anchor="middle" font-size="10" fill="#9aa4b2">DW+PW → 32×14×19</text><line x1="540" y1="90" x2="540" y2="99" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><rect x="420" y="160" width="240" height="44" rx="8" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="540.0" y="179" text-anchor="middle" font-size="12" fill="#2ca02c" font-weight="bold">dwsep 32→32 s1</text><text x="540.0" y="195" text-anchor="middle" font-size="10" fill="#9aa4b2">DW+PW → 32×14×19</text><line x1="540" y1="150" x2="540" y2="159" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><rect x="420" y="220" width="240" height="44" rx="8" fill="#11141b" stroke="#2ca02c" stroke-width="1.5"/><text x="540.0" y="239" text-anchor="middle" font-size="12" fill="#2ca02c" font-weight="bold">GAP → 32</text><text x="540.0" y="255" text-anchor="middle" font-size="10" fill="#9aa4b2">砍掉 flatten 大頭</text><line x1="540" y1="210" x2="540" y2="219" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><rect x="420" y="280" width="240" height="44" rx="8" fill="#11141b" stroke="#6b7686" stroke-width="1.5"/><text x="540.0" y="299" text-anchor="middle" font-size="12" fill="#6b7686" font-weight="bold">FC 128</text><text x="540.0" y="315" text-anchor="middle" font-size="10" fill="#9aa4b2">≈ 4.2k 參數</text><line x1="540" y1="270" x2="540" y2="279" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#a)"/><text x="540" y="360" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">≈ 7.3k 參數（~200× 少）</text><text x="360" y="40" text-anchor="middle" font-size="11" fill="#9aa4b2">輸入 1×120×160</text></svg><figcaption>圖 A — NatureCNN（左，flatten→FC 是參數大頭）vs TinyCNN（右，GAP 砍掉大頭 + depthwise 省 conv）。輸入解析度兩者相同。</figcaption></figure>
+<figure class="fig"><svg viewBox="0 0 720 165" width="100%" style="max-width:720px"><text x="20" y="22" font-size="14" fill="#fff" font-weight="bold">參數量對比（對數刻度）</text><rect x="120" y="44" width="480" height="34" rx="6" fill="#3a1418" stroke="#d62728"/><text x="20" y="66" font-size="12" fill="#d62728" font-weight="bold">NatureCNN</text><text x="608" y="66" font-size="12" fill="#e6e6e6">≈ 6.5M</text><rect x="120" y="92" width="47" height="34" rx="6" fill="#11261a" stroke="#2ca02c"/><text x="20" y="114" font-size="12" fill="#2ca02c" font-weight="bold">TinyCNN</text><text x="175" y="114" font-size="12" fill="#e6e6e6">≈ 7.3k</text><text x="20" y="150" font-size="11" fill="#9aa4b2">大頭差在 flatten→FC：GAP 直接把它砍掉；depthwise 再省 conv 參數。</text></svg><figcaption>圖 B — 參數量對比（對數刻度）。差距主要來自 flatten→FC。</figcaption></figure>
+<h2>全域限制（每個任務都適用）</h2>
+<ul>
+<li>新檔 <code>topracer/train/tiny_cnn.py</code>；用 torch + SB3 + gymnasium（既有相依）。</li>
+<li><b>opt-in</b>：<code>Config.features_extractor: str = "nature"</code>（"nature"|"tiny"），預設 nature → 不動現有訓練/模型。</li>
+<li>架構固定：<code>Conv(c→16,k8,s4)+ReLU → dwsep(16→32,s2) → dwsep(32→32,s1) → GAP → Flatten → FC(32→128)+ReLU</code>，<code>features_dim=128</code>。輸入 channels-first uint8，於 forward 內 <code>/255</code>。</li>
+<li><b>保持原解析度</b>，本版不做 ROI / 降解析度 / 量化。</li>
+<li>測試集中在 <code>tests/train/test_features_extractor.py</code>；跑：<code>.venv/bin/python -m pytest tests/train/test_features_extractor.py -v</code>。</li>
+</ul>
+<h2>任務（逐一 TDD）</h2>
+<div class="taskcard"><h2><span class="badge" style="background:#2ca02c">T1</span>TinyCNN 特徵抽取器</h2>
+<div class="lbl">檔案</div><ul><li>建立 <code>topracer/train/tiny_cnn.py</code></li><li>建立 <code>tests/train/test_features_extractor.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b>（無）</li><li><b>Produces：</b><ul><li><code>TinyCNN(observation_space, features_dim=128)</code>：SB3 BaseFeaturesExtractor；conv1(k8,s4)+2×dwsep+GAP+FC，輸出 (B, features_dim)</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/train/test_features_extractor.py</code></div><pre>import numpy as np
+import torch
+from gymnasium import spaces
+
+from topracer.train.tiny_cnn import TinyCNN
+
+
+def test_tinycnn_shape_and_param_budget():
+    obs = spaces.Box(low=0, high=255, shape=(1, 120, 160), dtype=np.uint8)
+    ext = TinyCNN(obs, features_dim=128)
+    out = ext(torch.zeros(4, 1, 120, 160))
+    assert out.shape == (4, 128)
+    n = sum(p.numel() for p in ext.parameters())
+    assert n &lt; 20000, f"TinyCNN too big: {n} params"</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/test_features_extractor.py -v</code> ⟶ <span class="bad">FAIL</span>：ModuleNotFoundError: topracer.train.tiny_cnn</div>
+<div class="lbl">② 最小實作</div><pre>import torch
+import torch.nn as nn
+from gymnasium import spaces
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+
+
+def _dwsep(cin, cout, stride):
+    """Depthwise-separable block: depthwise 3x3 (per-channel) + pointwise 1x1 + ReLU."""
+    return nn.Sequential(
+        nn.Conv2d(cin, cin, 3, stride=stride, padding=1, groups=cin, bias=False),
+        nn.Conv2d(cin, cout, 1, bias=False),
+        nn.ReLU(),
+    )
+
+
+class TinyCNN(BaseFeaturesExtractor):
+    """Tiny CNN features extractor for the PPO policy. Keeps the input resolution but
+    shrinks the network ~200x vs NatureCNN: a large-stride conv1 to compress space
+    fast, two depthwise-separable blocks, Global Average Pooling (which drops the huge
+    flatten-&gt;FC), then a small FC. Input is a channels-first uint8 image (SB3
+    transposes HWC-&gt;CHW); it is normalised to [0,1] inside forward()."""
+
+    def __init__(self, observation_space: spaces.Box, features_dim: int = 128):
+        super().__init__(observation_space, features_dim)
+        c = observation_space.shape[0]
+        self.cnn = nn.Sequential(
+            nn.Conv2d(c, 16, 8, stride=4), nn.ReLU(),   # big stride -&gt; fast spatial compress
+            _dwsep(16, 32, stride=2),
+            _dwsep(32, 32, stride=1),
+            nn.AdaptiveAvgPool2d(1),                    # GAP -&gt; (B, 32, 1, 1)
+            nn.Flatten(),                               # -&gt; (B, 32)
+        )
+        self.fc = nn.Sequential(nn.Linear(32, features_dim), nn.ReLU())
+
+    def forward(self, observations: torch.Tensor) -&gt; torch.Tensor:
+        return self.fc(self.cnn(observations.float() / 255.0))</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：forward 形狀正確、參數 ~7.3k &lt; 20k</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "TinyCNN features extractor (big-stride + depthwise + GAP)"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#1f77b4">T2</span>Config 旗標 + build_model 接線</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/config.py</code>（新增欄位）</li><li>修改 <code>topracer/train/train.py</code>（build_model）</li><li>修改 <code>tests/train/test_features_extractor.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b><code>TinyCNN</code>（T1）· 既有 <code>build_model · make_env_fn · Config</code></li><li><b>Produces：</b><ul><li><code>Config.features_extractor: str = "nature"</code></li><li><code>build_model</code> 在 <code>tiny</code> 時帶 policy_kwargs 用 TinyCNN；預設仍 NatureCNN</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/train/test_features_extractor.py</code></div><pre>def _circle(n=60, R=10.0, hw=1.0):
+    th = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    def ring(r): return np.stack([r * np.cos(th), r * np.sin(th)], axis=1)
+    return np.concatenate([ring(R), ring(R - hw), ring(R + hw)], axis=1)
+
+
+def _cfg(fe):
+    from topracer.config import Config
+    return Config(track_file="", meters_per_pixel=0.05, obs_width=160, obs_height=120,
+                  dt=1 / 15, n_envs=1, max_steps=50, off_track_ends_episode=True,
+                  crash_penalty=0.0, start_randomization=False, features_extractor=fe)
+
+
+def _model(fe):
+    from topracer.track.track import Track
+    from topracer.action_space import ContinuousActionSpace
+    from topracer.train.train import build_model, make_env_fn
+    cfg = _cfg(fe)
+    track = Track(_circle())
+    space = ContinuousActionSpace(-30.0, 30.0, 2.0, 4.0)
+    env_fn = make_env_fn(cfg, track, space, lambda p: 1.0)
+    return build_model(env_fn, cfg, ppo_kwargs={"batch_size": 8})
+
+
+def test_tiny_flag_selects_tinycnn():
+    assert type(_model("tiny").policy.features_extractor).__name__ == "TinyCNN"
+
+
+def test_default_flag_is_naturecnn():
+    assert type(_model("nature").policy.features_extractor).__name__ == "NatureCNN"</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/test_features_extractor.py -v</code> ⟶ <span class="bad">FAIL</span>：TypeError: Config got an unexpected keyword 'features_extractor'（欄位還沒加）</div>
+<div class="lbl">② 最小實作</div><div class="note">config.py 比照既有 <code>observation: str = "topdown"</code> 那行新增一個有預設值的欄位（放在 dataclass 的預設值區，舊 env.yaml 才不會壞）。</div><pre># (1) topracer/config.py — 在 observation 那一段（有預設值的欄位）旁邊新增一行：
+    features_extractor: str = "nature"   # "nature" | "tiny"
+
+# (2) topracer/train/train.py — 把 build_model 換成：
+def build_model(env_fn, cfg, ppo_kwargs=None):
+    ppo_kwargs = dict(ppo_kwargs or {})
+    vec = DummyVecEnv([env_fn for _ in range(cfg.n_envs)])
+    device = select_train_device()
+    policy_kwargs = None
+    if getattr(cfg, "features_extractor", "nature") == "tiny":
+        from topracer.train.tiny_cnn import TinyCNN
+        policy_kwargs = {"features_extractor_class": TinyCNN,
+                         "features_extractor_kwargs": {"features_dim": 128}}
+    return EpisodicPPO("CnnPolicy", vec, device=device, verbose=0,
+                       policy_kwargs=policy_kwargs, **ppo_kwargs)</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：tiny→TinyCNN、預設→NatureCNN 兩測通過</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "Config features_extractor flag + build_model wiring (opt-in tiny)"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#a06cff">T3</span>參數對照工具 + PPO smoke</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/train/tiny_cnn.py</code></li><li>修改 <code>tests/train/test_features_extractor.py</code></li></ul>
+<div class="lbl">介面</div><ul><li><b>Consumes：</b><code>TinyCNN</code>（T1）· <code>_model</code> helper（T2）</li><li><b>Produces：</b><ul><li><code>count_params(module)</code>、<code>compare_param_counts(observation_space, features_dim=128)</code> → {tiny, nature}</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試 → <code>tests/train/test_features_extractor.py</code></div><pre>def test_tiny_is_far_smaller_than_nature():
+    from topracer.train.tiny_cnn import compare_param_counts
+    obs = spaces.Box(low=0, high=255, shape=(1, 120, 160), dtype=np.uint8)
+    c = compare_param_counts(obs)
+    assert c["tiny"] &lt; c["nature"] / 50, c       # at least 50x smaller
+    print("param counts:", c)
+
+
+def test_tiny_policy_predicts():
+    m = _model("tiny")
+    obs = np.zeros((120, 160, 1), dtype=np.uint8)
+    action, _ = m.predict(obs, deterministic=True)
+    assert action.shape == (2,)                  # continuous steering + speed</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/test_features_extractor.py -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: tiny_cnn has no attribute 'compare_param_counts'</div>
+<div class="lbl">② 最小實作</div><pre>def count_params(module) -&gt; int:
+    """Total trainable parameter count of a torch module."""
+    return sum(p.numel() for p in module.parameters())
+
+
+def compare_param_counts(observation_space, features_dim: int = 128) -&gt; dict:
+    """Param counts of TinyCNN vs SB3's default NatureCNN on the same obs space."""
+    from stable_baselines3.common.torch_layers import NatureCNN
+    return {"tiny": count_params(TinyCNN(observation_space, features_dim)),
+            "nature": count_params(NatureCNN(observation_space, features_dim))}</pre>
+<div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：tiny ≪ nature(&gt;50×)、PPO predict 正常</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "TinyCNN param-count comparison util + PPO predict smoke"</pre></div>
+<h2>規格覆蓋</h2>
+<table><tr><th>設計項</th><th>任務</th></tr>
+<tr><td>大 stride conv1 + 16-32-32 depthwise + GAP + 128 FC</td><td>T1 <code>TinyCNN</code></td></tr>
+<tr><td>opt-in 旗標（預設 nature 不變）</td><td>T2 Config + build_model</td></tr>
+<tr><td>參數對照 / 量測 + PPO 端到端可跑</td><td>T3 compare_param_counts + predict smoke</td></tr></table>
+<div class="note warn"><b>不在這版（YAGNI）：</b>ROI 裁切、int8 量化、FLOPs 精算、降解析度、蒸餾。皆為後續可加。</div>
+<p class="sub" style="margin-top:36px">— 計畫書結束。執行：subagent-driven-development 或 executing-plans。</p>
+</div></body></html>
