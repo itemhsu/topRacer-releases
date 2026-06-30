@@ -1,0 +1,262 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NN 特徵抽取器架構搜尋 — TDD 實作計畫</title><style>:root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;--blue:#1f77b4;--green:#2ca02c;--red:#d62728;--amber:#e0a000;--line:#2a2f3a;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 22px 80px}h1{font-size:24px;margin:0 0 6px}h2{font-size:20px;margin:32px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:#fff}.sub{color:var(--muted);margin:0 0 8px}
+code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff;font-family:Menlo,monospace;font-size:13px}
+pre{background:#0c0e13;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.5;font-family:Menlo,monospace}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}th{background:#1d212a;color:#fff}
+.fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0;text-align:center}.fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+.taskcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 20px 18px;margin:16px 0}
+.tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+.note{border-left:3px solid var(--accent);padding:8px 14px;background:#15121d;border-radius:0 8px 8px 0;margin:12px 0}.warn{border-left:3px solid var(--amber);background:#1c1708}
+.badge{display:inline-block;min-width:30px;text-align:center;font-weight:bold;color:#0c0e13;border-radius:7px;padding:2px 9px;margin-right:8px;font-size:14px}
+.lbl{display:inline-block;font-size:11px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:14px 0 4px}
+.run{color:#9aa4b2;font-size:13px;margin:6px 0}.ok{color:#2ca02c}.bad{color:#d62728}ul{margin:6px 0;padding-left:20px}li{margin:3px 0}svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",monospace}</style></head><body><div class="wrap">
+<h1>NN 特徵抽取器架構搜尋(找最小但收斂不劣化太多)· TDD 實作計畫</h1>
+<p class="sub">topRacer · 2026-06-30 · 基準 = cont2mTan(NatureCNN)· 4 個基礎建設任務 + 1 個重算 sweep 步驟</p>
+<p><span class="tag">staged full sweep</span><span class="tag">指標=首次 eval≥95</span><span class="tag">2 seeds</span><span class="tag">門檻 ×1.5</span><span class="tag">36 變體</span></p>
+<div class="note"><b>目標:</b>以 <code>cont2mTan</code>(NatureCNN,收斂 iter≈10)為標準,在 channels×fc×grid×conv 的 36 種變體中,找出<b>參數最小、且收斂 iter ≤ 基準×1.5(≈15)、最終 eval 仍達 95%</b> 的特徵抽取器。
+<br>本計畫先建好<b>可測試的基礎建設</b>(抽取器家族、登錄表、sweep 指標、彙整/挑選/報告);真正的 36-變體訓練 sweep 是獨立的重算步驟(見最後),由你決定何時開跑。</div>
+<h2>方法</h2>
+<figure class="fig"><svg viewBox="0 0 720 152" width="100%" style="max-width:720px"><defs><marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs><text x="360" y="22" text-anchor="middle" font-size="15" fill="#fff" font-weight="bold">分階段全掃 (staged full sweep)</text><rect x="20" y="42" width="150" height="72" rx="9" fill="#11141b" stroke="#d62728" stroke-width="1.6"/><text x="95.0" y="64" text-anchor="middle" font-size="13" fill="#d62728" font-weight="bold">階段0 基準</text><text x="95.0" y="82" text-anchor="middle" font-size="11" fill="#9aa4b2">NatureCNN</text><text x="95.0" y="98" text-anchor="middle" font-size="11" fill="#9aa4b2">2 seed × 50 iter</text><text x="95.0" y="114" text-anchor="middle" font-size="11" fill="#9aa4b2">conv≈10 → 門檻 15</text><rect x="196" y="42" width="170" height="72" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.6"/><text x="281.0" y="64" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">階段1 篩選</text><text x="281.0" y="82" text-anchor="middle" font-size="11" fill="#9aa4b2">36 變體 × 1 seed × 30</text><text x="281.0" y="98" text-anchor="middle" font-size="11" fill="#9aa4b2">丟掉:未達 eval95</text><text x="281.0" y="114" text-anchor="middle" font-size="11" fill="#9aa4b2">或 conv 明顯 &gt;15</text><rect x="392" y="42" width="160" height="72" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.6"/><text x="472.0" y="64" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">階段2 確認</text><text x="472.0" y="82" text-anchor="middle" font-size="11" fill="#9aa4b2">存活者 × 2 seed × 50</text><text x="472.0" y="98" text-anchor="middle" font-size="11" fill="#9aa4b2">收斂 iter 中位數</text><rect x="578" y="42" width="128" height="72" rx="9" fill="#11141b" stroke="#2ca02c" stroke-width="1.6"/><text x="642.0" y="64" text-anchor="middle" font-size="13" fill="#2ca02c" font-weight="bold">挑選</text><text x="642.0" y="82" text-anchor="middle" font-size="11" fill="#9aa4b2">≤ 15 之中</text><text x="642.0" y="98" text-anchor="middle" font-size="11" fill="#9aa4b2">參數最小</text><line x1="170" y1="78" x2="196" y2="78" stroke="#9aa4b2" stroke-width="1.7" marker-end="url(#a)"/><line x1="366" y1="78" x2="392" y2="78" stroke="#9aa4b2" stroke-width="1.7" marker-end="url(#a)"/><line x1="552" y1="78" x2="578" y2="78" stroke="#9aa4b2" stroke-width="1.7" marker-end="url(#a)"/><text x="20" y="138" font-size="11" fill="#9aa4b2">指標=首次 eval_progress≥95 的 iter(必須真的達到 95);門檻=基準×1.5。搜尋空間:channels × fc × grid × conv = 36。</text></svg><figcaption>圖 A — 分階段全掃:基準定門檻 → 1-seed 便宜篩選 36 變體 → 2-seed 確認存活者 → 在 ≤門檻 中挑參數最小。</figcaption></figure>
+<figure class="fig"><svg viewBox="0 0 720 300" width="100%" style="max-width:720px"><text x="20" y="20" font-size="14" fill="#fff" font-weight="bold">params vs 收斂 iter(示意 Pareto;越左下越好)</text><line x1="70" y1="250" x2="690" y2="250" stroke="#2a2f3a"/><line x1="70" y1="30" x2="70" y2="250" stroke="#2a2f3a"/><line x1="111" y1="30" x2="111" y2="250" stroke="#1c2129" stroke-dasharray="2 4"/><text x="111" y="266" text-anchor="middle" font-size="10" fill="#9aa4b2">86k</text><line x1="246" y1="30" x2="246" y2="250" stroke="#1c2129" stroke-dasharray="2 4"/><text x="246" y="266" text-anchor="middle" font-size="10" fill="#9aa4b2">170k</text><line x1="460" y1="30" x2="460" y2="250" stroke="#1c2129" stroke-dasharray="2 4"/><text x="460" y="266" text-anchor="middle" font-size="10" fill="#9aa4b2">500k</text><line x1="677" y1="30" x2="677" y2="250" stroke="#1c2129" stroke-dasharray="2 4"/><text x="677" y="266" text-anchor="middle" font-size="10" fill="#9aa4b2">1.5M</text><text x="62" y="54" text-anchor="end" font-size="10" fill="#9aa4b2">10</text><text x="62" y="104" text-anchor="end" font-size="10" fill="#9aa4b2">15</text><text x="62" y="154" text-anchor="end" font-size="10" fill="#9aa4b2">20</text><text x="62" y="234" text-anchor="end" font-size="10" fill="#9aa4b2">28</text><text x="20" y="140" font-size="11" fill="#9aa4b2" transform="rotate(-90 20 140)">收斂 iter</text><line x1="70" y1="100" x2="690" y2="100" stroke="#e0a000" stroke-dasharray="6 4"/><text x="690" y="94" text-anchor="end" font-size="10.5" fill="#e0a000">門檻 = 基準×1.5 = 15</text><circle cx="677" cy="50" r="5" fill="#d62728"/><text x="686" y="54" font-size="10.5" fill="#d62728">NatureCNN(基準)</text><circle cx="111" cy="230" r="5" fill="#9aa4b2"/><text x="120" y="234" font-size="10.5" fill="#9aa4b2">tiny(現況,慢)</text><circle cx="467" cy="60" r="5" fill="#6b7686"/><text x="476" y="64" font-size="10.5" fill="#6b7686">變體 A</text><circle cx="330" cy="80" r="5" fill="#6b7686"/><text x="339" y="84" font-size="10.5" fill="#6b7686">變體 B</text><polygon points="221,83 227,95 215,95" fill="#2ca02c"/><text x="230" y="94" font-size="10.5" fill="#2ca02c">✓ 挑這個(最小且≤15)</text><circle cx="160" cy="140" r="5" fill="#6b7686"/><text x="169" y="144" font-size="10.5" fill="#6b7686">變體 C(超門檻)</text></svg><figcaption>圖 B — 結果長這樣(示意):x=參數(log)、y=收斂 iter。挑門檻線下、最靠左(參數最小)的那點(綠星)。</figcaption></figure>
+<h2>全域限制</h2>
+<ul>
+<li>新檔 <code>topracer/train/nas_sweep.py</code>、<code>topracer/train/nas_report.py</code>;擴充 <code>tiny_cnn.py</code>、<code>train.py</code>。torch + SB3 既有相依。</li>
+<li>抽取器一律 <b>flatten 保留空間</b>(不可 GAP——GAP 會抹掉位置,轉向學不起來)。</li>
+<li>固定設定:reward <code>Tangent Apex</code>、obs <code>bev_mesh</code>、action <code>cont13d2m</code>、bev_fov 79°(同 cont2mTan)。</li>
+<li>指標:<code>convergence_iter</code> = 首次 <code>eval_progress≥95</code> 的 iter;<b>沒達到 95 視為未收斂</b>。門檻 = 基準×1.5。</li>
+<li>搜尋空間:channels{w16,w24,w32} × grid{8×10,4×5} × fc{96,128,192} × conv{dw,full} = <b>36</b>。</li>
+<li>測試:<code>.venv/bin/python -m pytest tests/train/test_features_extractor.py tests/train/test_nas.py -v</code>(純函式,非 GUI)。</li>
+</ul>
+<h2>任務(逐一 TDD,建基礎建設)</h2>
+<div class="taskcard"><h2><span class="badge" style="background:#2ca02c">T1</span>ConfigurableCNN(可配置抽取器家族)</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/train/tiny_cnn.py</code></li><li>修改 <code>tests/train/test_features_extractor.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b>既有 <code>_dwsep</code>、<code>TinyCNN</code></li><li><b>Produces：</b><ul><li><code>_block(cin,cout,stride,conv)</code>(full / depthwise)</li><li><code>ConfigurableCNN(obs, channels, fc_dim=128, conv='dw')</code>:conv1(k8,s4)+stride-2 blocks+Flatten+FC,<b>保留空間</b></li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_configurable_cnn_shape_and_knobs():
+    from topracer.train.tiny_cnn import ConfigurableCNN
+    obs = spaces.Box(low=0, high=255, shape=(1, 120, 160), dtype=np.uint8)
+    p = lambda m: sum(x.numel() for x in m.parameters())
+    a = ConfigurableCNN(obs, channels=(16, 32, 32), fc_dim=96, conv="dw")
+    assert a(torch.zeros(2, 1, 120, 160)).shape == (2, 96)
+    assert p(ConfigurableCNN(obs, channels=(16, 32, 32), conv="full")) &gt; \
+           p(ConfigurableCNN(obs, channels=(16, 32, 32), conv="dw"))     # full &gt; depthwise
+    assert p(ConfigurableCNN(obs, channels=(16, 32, 32))) &gt; \
+           p(ConfigurableCNN(obs, channels=(16, 32, 32, 32)))            # 大格 -&gt; 更多參數</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/ -k "features_extractor or nas" -v</code> ⟶ <span class="bad">FAIL</span>：ImportError: cannot import name 'ConfigurableCNN'</div>
+<div class="lbl">② 最小實作</div><pre>def _block(cin, cout, stride, conv):
+    """One downsample block: 'full' = Conv3x3, 'dw' = depthwise-separable; both + ReLU."""
+    if conv == "full":
+        return nn.Sequential(nn.Conv2d(cin, cout, 3, stride=stride, padding=1), nn.ReLU())
+    return _dwsep(cin, cout, stride)
+
+
+class ConfigurableCNN(BaseFeaturesExtractor):
+    """Parametrised small CNN for the NAS sweep: conv1 (k8, s4) + stride-2 blocks
+    (depthwise-separable or full) -&gt; Flatten (keeps spatial) -&gt; FC. channels =
+    (conv1_out, block1, block2, ...); #stride-2 blocks (len(channels)-1) sets the grid."""
+
+    def __init__(self, observation_space: spaces.Box, channels=(16, 32, 32, 32),
+                 fc_dim: int = 128, conv: str = "dw"):
+        super().__init__(observation_space, fc_dim)
+        c = observation_space.shape[0]
+        layers = [nn.Conv2d(c, channels[0], 8, stride=4), nn.ReLU()]
+        for cin, cout in zip(channels[:-1], channels[1:]):
+            layers.append(_block(cin, cout, 2, conv))
+        layers.append(nn.Flatten())
+        self.cnn = nn.Sequential(*layers)
+        with torch.no_grad():
+            n = self.cnn(torch.zeros(1, *observation_space.shape)).shape[1]
+        self.fc = nn.Sequential(nn.Linear(n, fc_dim), nn.ReLU())
+
+    def forward(self, observations: torch.Tensor) -&gt; torch.Tensor:
+        return self.fc(self.cnn(observations))</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：形狀正確、full&gt;dw、大格&gt;小格 參數</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "NAS: ConfigurableCNN extractor family (channels/fc/grid/conv)"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#1f77b4">T2</span>變體登錄表 + build_model 接線(registry)</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/train/tiny_cnn.py</code></li><li>修改 <code>topracer/train/train.py</code></li><li>修改 <code>tests/train/test_features_extractor.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b><code>ConfigurableCNN</code>(T1)、既有 <code>build_model</code></li><li><b>Produces：</b><ul><li><code>register_variant(name,cls,**kw)</code>、<code>make_policy_kwargs(name)</code>(nature→None、tiny→TinyCNN、登錄名→variant)</li><li><code>build_model</code> 改用 registry(取代 if==tiny)</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_make_policy_kwargs_and_registry():
+    from topracer.train.tiny_cnn import make_policy_kwargs, register_variant, ConfigurableCNN, TinyCNN
+    assert make_policy_kwargs("nature") is None
+    assert make_policy_kwargs("tiny")["features_extractor_class"] is TinyCNN
+    register_variant("v_t", ConfigurableCNN, channels=(16, 32, 32), fc_dim=96, conv="dw")
+    pk = make_policy_kwargs("v_t")
+    assert pk["features_extractor_class"] is ConfigurableCNN
+    assert pk["features_extractor_kwargs"]["fc_dim"] == 96
+
+
+def test_build_model_selects_registered_variant():
+    from topracer.train.tiny_cnn import register_variant, ConfigurableCNN
+    register_variant("v_b", ConfigurableCNN, channels=(16, 32, 32), fc_dim=96)
+    assert type(_model("v_b").policy.features_extractor).__name__ == "ConfigurableCNN"</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/ -k "features_extractor or nas" -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError: no attribute 'make_policy_kwargs'</div>
+<div class="lbl">② 最小實作</div><div class="note">build_model 既有的 if=="tiny" 分支整段換成上面用 make_policy_kwargs 的版本。</div><pre># (1) topracer/train/tiny_cnn.py — append:
+_REGISTRY = {}
+
+
+def register_variant(name, cls, **kwargs):
+    """Register a features-extractor variant so build_model can select it by name."""
+    _REGISTRY[name] = (cls, kwargs)
+
+
+def make_policy_kwargs(name):
+    """policy_kwargs for a features_extractor name; None for 'nature' (SB3 default)."""
+    if name == "nature":
+        return None
+    if name == "tiny":
+        return {"features_extractor_class": TinyCNN}
+    if name in _REGISTRY:
+        cls, kw = _REGISTRY[name]
+        return {"features_extractor_class": cls, "features_extractor_kwargs": kw}
+    return None
+
+# (2) topracer/train/train.py — replace build_model's extractor branch with:
+def build_model(env_fn, cfg, ppo_kwargs=None):
+    ppo_kwargs = dict(ppo_kwargs or {})
+    vec = DummyVecEnv([env_fn for _ in range(cfg.n_envs)])
+    device = select_train_device()
+    from topracer.train.tiny_cnn import make_policy_kwargs
+    pk = make_policy_kwargs(getattr(cfg, "features_extractor", "nature"))
+    if pk is not None:
+        ppo_kwargs["policy_kwargs"] = pk
+    return EpisodicPPO("CnnPolicy", vec, device=device, verbose=0, **ppo_kwargs)</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：registry/選用通過;且既有 tiny→TinyCNN、nature→NatureCNN 仍過</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "NAS: variant registry + build_model wiring (generalises if==tiny)"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#e0a000">T3</span>搜尋空間(36)+ 收斂指標</h2>
+<div class="lbl">檔案</div><ul><li>建立 <code>topracer/train/nas_sweep.py</code></li><li>建立 <code>tests/train/test_nas.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b><code>ConfigurableCNN</code>、<code>register_variant</code>(T1/T2)</li><li><b>Produces：</b><ul><li><code>sweep_variants()</code> → 36 個 (name,kwargs)(channels×grid×fc×conv),並登錄</li><li><code>convergence_iter(training_json, thresh=95)</code> → 首次 eval≥95 的 iter 或 None</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_sweep_variants_full_grid():
+    from topracer.train.nas_sweep import sweep_variants
+    v = sweep_variants()
+    assert len(v) == 36 and len({n for n, _ in v}) == 36          # full grid, unique
+    d = dict(v)
+    assert len(d["w16_g4x5_fc96_dw"]["channels"]) == len(d["w16_g8x10_fc96_dw"]["channels"]) + 1
+
+
+def test_convergence_iter():
+    from topracer.train.nas_sweep import convergence_iter
+    tj = {"iterations": [{"iteration": i, "eval_progress": p}
+                         for i, p in [(0, 20), (1, 50), (2, 96), (3, 100)]]}
+    assert convergence_iter(tj) == 2
+    assert convergence_iter({"iterations": [{"iteration": 0, "eval_progress": 10}]}) is None</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/ -k "features_extractor or nas" -v</code> ⟶ <span class="bad">FAIL</span>：ModuleNotFoundError: topracer.train.nas_sweep</div>
+<div class="lbl">② 最小實作</div><pre>import itertools
+
+from topracer.train.tiny_cnn import ConfigurableCNN, register_variant
+
+WIDTHS = {"w16": (16, 32, 32), "w24": (24, 48, 48), "w32": (32, 64, 64)}
+GRIDS = {"g8x10": 0, "g4x5": 1}     # 1 = one extra stride-2 block -&gt; smaller grid
+FCS = (96, 128, 192)
+CONVS = ("dw", "full")
+
+
+def sweep_variants():
+    """The full 36-cell grid as [(name, kwargs)], each registered by name."""
+    out = []
+    for (wn, w), (gn, extra), fc, conv in itertools.product(
+            WIDTHS.items(), GRIDS.items(), FCS, CONVS):
+        channels = tuple(w) + (w[-1],) * extra
+        name = f"{wn}_{gn}_fc{fc}_{conv}"
+        kw = dict(channels=channels, fc_dim=fc, conv=conv)
+        register_variant(name, ConfigurableCNN, **kw)
+        out.append((name, kw))
+    return out
+
+
+def convergence_iter(training_json, thresh=95.0):
+    """First iteration whose eval_progress &gt;= thresh; None if it never reaches it."""
+    for it in training_json.get("iterations", []):
+        if (it.get("eval_progress") or 0) &gt;= thresh:
+            return it.get("iteration")
+    return None</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：36 個唯一變體、convergence_iter 正確</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "NAS: sweep space (36 variants) + convergence metric"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#a06cff">T4</span>彙整 / 挑選 + HTML 報告</h2>
+<div class="lbl">檔案</div><ul><li>建立 <code>topracer/train/nas_report.py</code></li><li>修改 <code>tests/train/test_nas.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b>sweep 結果(name→每 seed 的 conv_iter)、params</li><li><b>Produces：</b><ul><li><code>aggregate(results, params)</code>、<code>pick_smallest(agg, baseline_iter, factor=1.5)</code>、<code>render_report(agg, baseline_iter, pick, out_path)</code></li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_aggregate_and_pick_smallest():
+    from topracer.train.nas_report import aggregate, pick_smallest
+    res = {"big": [10, 12], "mid": [13, 14], "tiny": [28, 30], "fail": [None, 40]}
+    params = {"big": 500000, "mid": 120000, "tiny": 86000, "fail": 50000}
+    agg = aggregate(res, params)
+    assert agg["fail"]["reached"] is False                       # a seed never reached eval95
+    assert pick_smallest(agg, baseline_iter=10, factor=1.5) == "mid"   # smallest params, conv&lt;=15
+    assert pick_smallest(agg, baseline_iter=5, factor=1.0) is None
+
+
+def test_render_report_writes_pick(tmp_path):
+    from topracer.train.nas_report import render_report
+    agg = {"mid": {"median": 13.5, "reached": True, "params": 120000}}
+    out = render_report(agg, 10, "mid", str(tmp_path / "r.html"))
+    s = open(out, encoding="utf-8").read()
+    assert "mid" in s and "params" in s and "推薦" in s</pre>
+<div class="run">▶ <code>.venv/bin/python -m pytest tests/train/ -k "features_extractor or nas" -v</code> ⟶ <span class="bad">FAIL</span>：AttributeError / FileNotFound（nas_report 還沒有）</div>
+<div class="lbl">② 最小實作</div><pre>import statistics
+
+
+def aggregate(results, params):
+    """results: {name: [conv_iter|None per seed]}; params: {name: int}.
+    -&gt; {name: {"median": float|None, "reached": bool, "params": int}}."""
+    agg = {}
+    for name, iters in results.items():
+        ok = [i for i in iters if i is not None]
+        agg[name] = {"median": statistics.median(ok) if ok else None,
+                     "reached": len(iters) &gt; 0 and len(ok) == len(iters),
+                     "params": params.get(name)}
+    return agg
+
+
+def pick_smallest(agg, baseline_iter, factor=1.5):
+    """Smallest-params variant that reached eval95 on every seed and whose median
+    convergence iter &lt;= baseline_iter*factor. None if nothing qualifies."""
+    cap = baseline_iter * factor
+    elig = [(v["params"], n) for n, v in agg.items()
+            if v["reached"] and v["median"] is not None and v["median"] &lt;= cap]
+    return min(elig)[1] if elig else None
+
+
+def render_report(agg, baseline_iter, pick, out_path):
+    """Write an HTML table of every variant (params / median conv iter / reached) and
+    highlight the recommended pick. Returns out_path."""
+    rows = sorted(agg.items(), key=lambda kv: (kv[1]["params"] or 0))
+    trs = "".join(
+        f"&lt;tr style='background:{'#10261a' if n == pick else 'transparent'}'&gt;"
+        f"&lt;td&gt;{n}&lt;/td&gt;&lt;td&gt;{v['params']}&lt;/td&gt;&lt;td&gt;{v['median']}&lt;/td&gt;"
+        f"&lt;td&gt;{'OK' if v['reached'] else 'x'}&lt;/td&gt;&lt;/tr&gt;" for n, v in rows)
+    doc = (f"&lt;!doctype html&gt;&lt;meta charset=utf-8&gt;&lt;title&gt;NAS sweep&lt;/title&gt;"
+           f"&lt;h1&gt;NAS sweep (baseline conv={baseline_iter}, cap={baseline_iter * 1.5})&lt;/h1&gt;"
+           f"&lt;p&gt;&lt;b&gt;推薦(最小且達標):&lt;/b&gt; {pick}&lt;/p&gt;"
+           f"&lt;table border=1&gt;&lt;tr&gt;&lt;th&gt;variant&lt;/th&gt;&lt;th&gt;params&lt;/th&gt;"
+           f"&lt;th&gt;median conv iter&lt;/th&gt;&lt;th&gt;reached95&lt;/th&gt;&lt;/tr&gt;{trs}&lt;/table&gt;")
+    open(out_path, "w", encoding="utf-8").write(doc)
+    return out_path</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：aggregate/pick/render 三測通過</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "NAS: aggregate + pick-smallest + HTML report"</pre></div>
+<h2>執行 sweep(重算步驟,非 TDD 任務)</h2>
+<p>基礎建設就緒後,跑這段(分篩選/確認兩階段),再用 <code>nas_report</code> 出報告:</p>
+<pre># 重算步驟（不在 CI；~36×1×30 篩選 + 存活者×2×50 確認）。固定設定同 cont2mTan：
+#   reward=Tangent Apex, observation=bev_mesh, action=cont13d2m
+from topracer.train.nas_sweep import sweep_variants, convergence_iter
+from topracer.train.train import run_training
+from topracer.train.tiny_cnn import make_policy_kwargs, ConfigurableCNN
+from topracer.model_builder import build_config_dir
+import json, os
+
+def run_one(name, seed, iters, track, action, reward_src, root="models/nas"):
+    cfg_dir = f"{root}/cfg_{name}_s{seed}"
+    build_config_dir(cfg_dir, track_name=track, action_space=action, reward_src=reward_src,
+                     observation="bev_mesh",
+                     extra_env={"bev_fov_diag_deg": 79.0, "features_extractor": name})
+    mdir = run_training(model_name=f"nas_{name}_s{seed}", models_root=root,
+                        config_dir=cfg_dir, iterations=iters, ppo_kwargs={"seed": seed})
+    tj = json.load(open(os.path.join(mdir, "metrics", "training.json")))
+    return convergence_iter(tj)
+
+# screen: variants × 1 seed × 30; confirm survivors × 2 seeds × 50; then nas_report.</pre>
+<div class="note warn"><b>成本:</b>篩選 36×1×30 ≈ 1080 iter;確認 存活者×2×50。建議先小規模試 run_one 幾個變體確認管線,再全開。</div>
+<h2>規格覆蓋</h2>
+<table><tr><th>設計</th><th>任務</th></tr>
+<tr><td>可配置抽取器(channels/fc/grid/conv)</td><td>T1</td></tr>
+<tr><td>變體登錄 + 用名稱選用(generalises if==tiny)</td><td>T2</td></tr>
+<tr><td>36 變體搜尋空間 + 收斂指標</td><td>T3</td></tr>
+<tr><td>彙整 + 挑最小達標 + HTML 報告</td><td>T4</td></tr>
+<tr><td>跑 sweep(分階段)</td><td>執行步驟</td></tr></table>
+<p class="sub" style="margin-top:36px">— 計畫書結束。先以 subagent-driven-development 建 T1–T4,再執行 sweep。</p>
+</div></body></html>
