@@ -25,6 +25,7 @@ table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{bor
 <li>新檔 <code>topracer/train/tiny_cnn.py</code>；用 torch + SB3 + gymnasium（既有相依）。</li>
 <li><b>opt-in</b>：<code>Config.features_extractor: str = "nature"</code>（"nature"|"tiny"），預設 nature → 不動現有訓練/模型。</li>
 <li>架構固定：<code>Conv(c→16,k8,s4)+ReLU → dwsep(16→32,s2) → dwsep(32→32,s1) → GAP → Flatten → FC(32→128)+ReLU</code>，<code>features_dim=128</code>。輸入 channels-first uint8，於 forward 內 <code>/255</code>。</li>
+<li><b>正規化</b>：SB3 預設 <code>normalize_images=True</code> 會先把影像 obs 除以 255 → [0,1] 再進 extractor，所以 <code>forward</code> <b>不可再除一次</b>（比照 NatureCNN）。</li>
 <li><b>保持原解析度</b>，本版不做 ROI / 降解析度 / 量化。</li>
 <li>測試集中在 <code>tests/train/test_features_extractor.py</code>；跑：<code>.venv/bin/python -m pytest tests/train/test_features_extractor.py -v</code>。</li>
 </ul>
@@ -67,7 +68,7 @@ class TinyCNN(BaseFeaturesExtractor):
     shrinks the network ~200x vs NatureCNN: a large-stride conv1 to compress space
     fast, two depthwise-separable blocks, Global Average Pooling (which drops the huge
     flatten-&gt;FC), then a small FC. Input is a channels-first uint8 image (SB3
-    transposes HWC-&gt;CHW); it is normalised to [0,1] inside forward()."""
+    transposes HWC-&gt;CHW); SB3 normalises image obs to [0,1] BEFORE the extractor (normalize_images=True), like NatureCNN, so forward does NOT divide again."""
 
     def __init__(self, observation_space: spaces.Box, features_dim: int = 128):
         super().__init__(observation_space, features_dim)
@@ -82,7 +83,9 @@ class TinyCNN(BaseFeaturesExtractor):
         self.fc = nn.Sequential(nn.Linear(32, features_dim), nn.ReLU())
 
     def forward(self, observations: torch.Tensor) -&gt; torch.Tensor:
-        return self.fc(self.cnn(observations.float() / 255.0))</pre>
+        # SB3 already normalises image obs to [0,1] before the extractor
+        # (normalize_images=True), like NatureCNN -- do NOT divide again here.
+        return self.fc(self.cnn(observations))</pre>
 <div class="run">▶ 同上指令 ⟶ <span class="ok">PASS</span>：forward 形狀正確、參數 ~7.3k &lt; 20k</div>
 <div class="lbl">③ 提交</div><pre>git commit -am "TinyCNN features extractor (big-stride + depthwise + GAP)"</pre></div>
 <div class="taskcard"><h2><span class="badge" style="background:#1f77b4">T2</span>Config 旗標 + build_model 接線</h2>
