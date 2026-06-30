@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>建模選策略網路 (NatureCNN / TinyCNN) — TDD 實作計畫</title><style>:root{--bg:#0f1115;--card:#171a21;--ink:#e6e6e6;--muted:#9aa4b2;--accent:#a06cff;--blue:#1f77b4;--green:#3aa657;--amber:#e0a000;--line:#2a2f3a;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 22px 80px}h1{font-size:24px;margin:0 0 6px}h2{font-size:20px;margin:32px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:#fff}.sub{color:var(--muted);margin:0 0 8px}
+code{background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#d7c4ff;font-family:Menlo,monospace;font-size:13px}
+pre{background:#0c0e13;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;line-height:1.5;font-family:Menlo,monospace}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}th{background:#1d212a;color:#fff}
+.fig{background:#0c0e13;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0;text-align:center}.fig figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+.taskcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 20px 18px;margin:16px 0}
+.tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+.note{border-left:3px solid var(--accent);padding:8px 14px;background:#15121d;border-radius:0 8px 8px 0;margin:12px 0}
+.badge{display:inline-block;min-width:30px;text-align:center;font-weight:bold;color:#0c0e13;border-radius:7px;padding:2px 9px;margin-right:8px;font-size:14px}
+.lbl{display:inline-block;font-size:11px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin:14px 0 4px}
+.run{color:#9aa4b2;font-size:13px;margin:6px 0}.ok{color:#3aa657}.bad{color:#d62728}ul{margin:6px 0;padding-left:20px}li{margin:3px 0}svg text{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",monospace}</style></head><body><div class="wrap">
+<h1>建模時選策略網路（NatureCNN / TinyCNN）＋ 詳細頁顯示 · TDD 實作計畫</h1>
+<p class="sub">topRacer · 2026-06-30 · 3 個任務 · 只動 UI（後端已就緒）</p>
+<p><span class="tag">UI only</span><span class="tag">opt-in</span><span class="tag">env.yaml + meta</span><span class="tag">詳細頁一列</span><span class="tag">3 任務 TDD</span></p>
+<div class="note"><b>目標：</b>在「建立模型」精靈讓使用者選 <b>原本 NatureCNN</b> 或 <b>迷你 TinyCNN</b>，選值寫進該模型的 <code>env.yaml</code>（訓練時 <code>build_model</code> 自動切網路）；<b>詳細頁</b>多一列顯示用哪個網路。
+<br><b>後端已就緒：</b><code>Config.features_extractor</code> 是合法 env.yaml key、<code>load_config</code> 自動接受、<code>build_config_dir</code> 有 <code>extra_env</code>、<code>build_model</code> 已會切換 → <b>只動精靈 UI + 詳細頁一列</b>。</div>
+<h2>資料流</h2>
+<figure class="fig"><svg viewBox="0 0 720 288" width="100%" style="max-width:720px"><defs><marker id="a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/></marker></defs><text x="360" y="24" text-anchor="middle" font-size="15" fill="#fff" font-weight="bold">建模選網路 → 訓練/顯示</text><rect x="28" y="120" width="176" height="60" rx="9" fill="#11141b" stroke="#a06cff" stroke-width="1.6"/><text x="116.0" y="142" text-anchor="middle" font-size="13" fill="#a06cff" font-weight="bold">精靈：策略網路 ▾</text><text x="116.0" y="170" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">nature | tiny</text><rect x="268" y="46" width="196" height="52" rx="9" fill="#11141b" stroke="#1f77b4" stroke-width="1.6"/><text x="366.0" y="68" text-anchor="middle" font-size="13" fill="#1f77b4" font-weight="bold">模型 env.yaml</text><text x="366.0" y="88" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">features_extractor: tiny</text><rect x="520" y="46" width="176" height="52" rx="9" fill="#11141b" stroke="#3aa657" stroke-width="1.6"/><text x="608.0" y="68" text-anchor="middle" font-size="13" fill="#3aa657" font-weight="bold">build_model</text><text x="608.0" y="88" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">→ TinyCNN / NatureCNN</text><rect x="268" y="200" width="196" height="52" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.6"/><text x="366.0" y="222" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">meta["features_extractor"]</text><rect x="520" y="200" width="176" height="52" rx="9" fill="#11141b" stroke="#e0a000" stroke-width="1.6"/><text x="608.0" y="222" text-anchor="middle" font-size="13" fill="#e0a000" font-weight="bold">詳細頁「策略網路」列</text><text x="608.0" y="242" text-anchor="middle" font-size="11" fill="#9aa4b2" font-family="monospace">迷你 TinyCNN</text><line x1="204" y1="138" x2="268" y2="80" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><text x="236.0" y="103.0" text-anchor="middle" font-size="10.5" fill="#9aa4b2">build_spec · extra_env</text><line x1="204" y1="162" x2="268" y2="222" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><text x="236.0" y="186.0" text-anchor="middle" font-size="10.5" fill="#9aa4b2">build_spec · meta</text><line x1="464" y1="72" x2="520" y2="72" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><text x="492.0" y="66.0" text-anchor="middle" font-size="10.5" fill="#9aa4b2">load_config 自動讀</text><line x1="464" y1="226" x2="520" y2="226" stroke="#9aa4b2" stroke-width="1.6" marker-end="url(#a)"/><text x="492.0" y="220.0" text-anchor="middle" font-size="10.5" fill="#9aa4b2">detail_rows</text><text x="28" y="276" font-size="11" fill="#9aa4b2">後端全就緒：load_config 接受 features_extractor、build_model 已會切網路。只動精靈 UI + 詳細頁一列。</text></svg><figcaption>圖 — 精靈下拉 → build_spec 把 features_extractor 寫進 env.yaml（訓練用）與 meta（詳細頁顯示用）。</figcaption></figure>
+<h2>全域限制</h2>
+<ul>
+<li>只動 <code>topracer/ui/wizards/create_model_wizard.py</code> 與 <code>topracer/ui/pages/model_details.py</code>（＋各自測試）。不改後端。</li>
+<li>combo 值固定 <code>"nature"</code> | <code>"tiny"</code>，預設 <b>nature</b>；標籤「原本 NatureCNN（預設）」/「迷你 TinyCNN（~200× 小）」。</li>
+<li>詳細頁列名「策略網路」；值「原本 NatureCNN」/「迷你 TinyCNN」；缺鍵（舊模型）→「原本 NatureCNN」。</li>
+<li>這些是 Qt GUI 測試：macOS 要 <code>QT_QPA_PLATFORM=cocoa</code>。整輪：<code>QT_QPA_PLATFORM=cocoa .venv/bin/python -m pytest tests/ui/test_create_model_wizard.py tests/ui/test_model_details.py -v</code>。</li>
+</ul>
+<h2>任務（逐一 TDD）</h2>
+<div class="taskcard"><h2><span class="badge" style="background:#e0a000">T1</span>詳細頁顯示「策略網路」</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/ui/pages/model_details.py</code></li><li>修改 <code>tests/ui/test_model_details.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b>（無；讀 meta）</li><li><b>Produces：</b><ul><li><code>detail_rows(meta)</code> 多一列 <code>("策略網路", …)</code>：tiny→「迷你 TinyCNN」、其餘/缺鍵→「原本 NatureCNN」</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_detail_rows_show_features_extractor():
+    from topracer.ui.pages.model_details import detail_rows
+    assert ("策略網路", "迷你 TinyCNN") in detail_rows({"track": "T", "features_extractor": "tiny"})
+    assert ("策略網路", "原本 NatureCNN") in detail_rows({"track": "T"})   # 預設/舊模型</pre>
+<div class="run">▶ <code>QT_QPA_PLATFORM=cocoa .venv/bin/python -m pytest …</code> ⟶ <span class="bad">FAIL</span>：AssertionError（detail_rows 還沒有「策略網路」列）</div>
+<div class="lbl">② 最小實作</div><pre># (1) topracer/ui/pages/model_details.py — module level（detail_rows 之前）新增：
+_NET_LABEL = {"tiny": "迷你 TinyCNN", "nature": "原本 NatureCNN"}
+
+# (2) 在 detail_rows() 的 list 內、("演算法", ...) 那行之後插入一列：
+        ("策略網路", _NET_LABEL.get(meta.get("features_extractor", "nature"),
+                                  "原本 NatureCNN")),</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：兩個 assert 通過</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "ui: 詳細頁顯示策略網路 (NatureCNN / TinyCNN)"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#a06cff">T2</span>建模精靈：選 NatureCNN / TinyCNN</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/ui/wizards/create_model_wizard.py</code></li><li>修改 <code>tests/ui/test_create_model_wizard.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b>既有 <code>build_config_dir(extra_env=…)</code>、<code>Config.features_extractor</code>、<code>load_config</code></li><li><b>Produces：</b><ul><li><code>net_combo</code> + <code>features_extractor()</code></li><li><code>build_spec</code> 把選值寫進 env.yaml（extra_env）與 meta</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_features_extractor_flows_into_spec(qtbot, tmp_path):
+    w = _wiz(qtbot, tmp_path)
+    assert w.features_extractor() == "nature"          # 預設（combo index 0）
+    w.net_combo.setCurrentIndex(1)                      # tiny
+    w.name_edit.setText("m-tiny")
+    spec = w.build_spec()
+    assert spec["meta"]["features_extractor"] == "tiny"
+    cfg = load_config(os.path.join(spec["config_dir"], "env.yaml"))
+    assert cfg.features_extractor == "tiny"</pre>
+<div class="run">▶ <code>QT_QPA_PLATFORM=cocoa .venv/bin/python -m pytest …</code> ⟶ <span class="bad">FAIL</span>：AttributeError: CreateModelWizard has no attribute 'net_combo'</div>
+<div class="lbl">② 最小實作</div><div class="note">改 build_spec 時：把原本 <code>extra_env={"bev_fov_diag_deg": fov}</code> 換成含 features_extractor 的版本；meta dict 內 <code>"observation": ...</code> 那行旁加 features_extractor。</div><pre># (1) __init__ 內、lens_combo 那幾行之後新增：
+        self.net_combo = QComboBox()
+        self._NET = [("原本 NatureCNN（預設）", "nature"), ("迷你 TinyCNN（~200× 小）", "tiny")]
+        self.net_combo.addItems([label for label, _ in self._NET])
+
+# (2) 在「演算法 / 超參數」頁的 rows list、("鏡頭 (BEV)", self.lens_combo) 之後加：
+                                 ("策略網路", self.net_combo),
+
+# (3) 在 observation() accessor 旁新增：
+    def features_extractor(self):
+        return self._NET[self.net_combo.currentIndex()][1]
+
+# (4) build_spec：擴充 extra_env 與 meta：
+                         extra_env={"bev_fov_diag_deg": fov,
+                                    "features_extractor": self.features_extractor()},
+        #   ...在 meta dict 內加一行：
+            "features_extractor": self.features_extractor(),</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：預設 nature、選 tiny 時 env.yaml/meta 皆為 tiny</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "ui: 建模精靈可選策略網路 (NatureCNN / TinyCNN)"</pre></div>
+<div class="taskcard"><h2><span class="badge" style="background:#1f77b4">T3</span>再訓練 preset round-trip</h2>
+<div class="lbl">檔案</div><ul><li>修改 <code>topracer/ui/wizards/create_model_wizard.py</code></li><li>修改 <code>tests/ui/test_create_model_wizard.py</code></li></ul><div class="lbl">介面</div><ul><li><b>Consumes：</b><code>net_combo / _NET / features_extractor()</code>（T2）</li><li><b>Produces：</b><ul><li><code>preset_from_model</code> 帶出 features_extractor；<code>apply_preset</code> 依 preset 預選 net_combo</li></ul></li></ul>
+<div class="lbl">① 寫失敗測試</div><pre>def test_features_extractor_preset_round_trips(qtbot, tmp_path):
+    w = _wiz(qtbot, tmp_path)
+    w.apply_preset({"features_extractor": "tiny"})
+    assert w.features_extractor() == "tiny"
+    w.apply_preset({"features_extractor": "nature"})
+    assert w.features_extractor() == "nature"</pre>
+<div class="run">▶ <code>QT_QPA_PLATFORM=cocoa .venv/bin/python -m pytest …</code> ⟶ <span class="bad">FAIL</span>：AssertionError（apply_preset 還沒預選 net_combo）</div>
+<div class="lbl">② 最小實作</div><pre># (1) preset_from_model(model)：在回傳的 preset dict 內加：
+        "features_extractor": meta.get("features_extractor", "nature"),
+
+# (2) apply_preset(self, preset)：在 observation 預選那段旁加：
+        fe = preset.get("features_extractor")
+        if fe:
+            i = next((k for k, (_, v) in enumerate(self._NET) if v == fe), -1)
+            if i &gt;= 0:
+                self.net_combo.setCurrentIndex(i)</pre>
+<div class="run">▶ 同上 ⟶ <span class="ok">PASS</span>：preset round-trip 通過</div>
+<div class="lbl">③ 提交</div><pre>git commit -am "ui: 再訓練保留策略網路選擇 (preset round-trip)"</pre></div>
+<h2>規格覆蓋</h2>
+<table><tr><th>設計項</th><th>任務</th></tr>
+<tr><td>詳細頁顯示用哪個網路</td><td>T1 detail_rows</td></tr>
+<tr><td>精靈選 net + 寫進 env.yaml/meta</td><td>T2 net_combo + build_spec</td></tr>
+<tr><td>再訓練保留選擇</td><td>T3 preset round-trip</td></tr></table>
+<p class="sub" style="margin-top:36px">— 計畫書結束。執行：subagent-driven-development。</p>
+</div></body></html>
