@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>topRacer · 教學與報告</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.6 -apple-system, "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+         max-width: 760px; margin: 0 auto; padding: 2.4rem 1.2rem 4rem; color: #1c1c1e; background: #fafafa; }
+  @media (prefers-color-scheme: dark) { body { color: #e6e6e6; background: #17181a; } a { color: #6ab0ff; } .card { background: #1f2124; border-color: #303236; } h2 { border-color: #303236; } }
+  h1 { font-size: 1.8rem; margin: 0 0 .2rem; }
+  .sub { color: #888; margin: 0 0 2rem; }
+  h2 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .04em; color: #888;
+       border-bottom: 1px solid #e5e5e5; padding-bottom: .3rem; margin: 2.2rem 0 1rem; }
+  a { color: #0a66c2; text-decoration: none; }
+  .card { display: block; border: 1px solid #e5e5e5; border-radius: 10px; padding: .85rem 1.1rem;
+          margin: .6rem 0; background: #fff; transition: transform .08s ease, box-shadow .08s ease; }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+  .card .t { font-weight: 600; font-size: 1.02rem; }
+  .card .d { color: #777; font-size: .9rem; margin-top: .15rem; }
+  .badge { display: inline-block; font-size: .72rem; font-weight: 700; padding: .1rem .5rem;
+           border-radius: 6px; margin-left: .5rem; vertical-align: middle; }
+  .new { background: #e7f6ec; color: #1a7f37; }
+  @media (prefers-color-scheme: dark) { .new { background: #16351f; color: #4ac26b; } }
+  footer { margin-top: 3rem; color: #999; font-size: .82rem; }
+</style>
+</head>
+<body>
+  <h1>🏎️ topRacer</h1>
+  <p class="sub">本地端 DeepRacer 風格強化學習訓練器 · 教學文件與實驗報告</p>
+
+  <h2>架構搜尋 · NAS</h2>
+  <a class="card" href="nas-star36-wallclock-report.html">
+    <div class="t">36 變體 · 紅星／牆鐘報告<span class="badge new">NEW</span></div>
+    <div class="d">在 cont2mTan 完全相同條件下搜尋 36 種策略網路架構,以「第一個紅星」與「牆鐘時間到紅星」比較,含可排序表格與 MMACs×牆鐘 Pareto。</div>
+  </a>
+  <a class="card" href="nas-extractor-search-plan.html">
+    <div class="t">NAS 特徵萃取器搜尋 · 計畫</div>
+    <div class="d">架構搜尋的實驗設計與方法。</div>
+  </a>
+  <a class="card" href="tiny-cnn-features-extractor-plan.html">
+    <div class="t">TinyCNN 特徵萃取器 · 計畫</div>
+    <div class="d">輕量 CNN 萃取器的設計與取捨。</div>
+  </a>
+  <a class="card" href="wizard-select-features-extractor-plan.html">
+    <div class="t">建模精靈選用萃取器 · 計畫</div>
+    <div class="d">在模型精靈中選擇策略網路的流程設計。</div>
+  </a>
+
+  <h2>獎勵函數</h2>
+  <a class="card" href="reward-functions-overview.html">
+    <div class="t">獎勵函數總覽</div>
+    <div class="d">各種 reward 設計的整體介紹與比較。</div>
+  </a>
+  <a class="card" href="tangent-point-steering-reward.html">
+    <div class="t">切點轉向獎勵</div>
+    <div class="d">以切點(tangent point)為目標的轉向獎勵。</div>
+  </a>
+  <a class="card" href="tangent-point-steering-reward-plan.html">
+    <div class="t">切點轉向獎勵 · 計畫</div>
+    <div class="d">切點轉向獎勵的設計文件。</div>
+  </a>
+  <a class="card" href="tangent-apex-speed-reward.html">
+    <div class="t">切點頂點速度獎勵</div>
+    <div class="d">結合切點與頂點速度的進階獎勵。</div>
+  </a>
+  <a class="card" href="tangent-apex-speed-reward-plan.html">
+    <div class="t">切點頂點速度獎勵 · 計畫</div>
+    <div class="d">切點頂點速度獎勵的設計文件。</div>
+  </a>
+
+  <h2>教學</h2>
+  <a class="card" href="claude-for-education-teacher-guide.html">
+    <div class="t">Claude for Education 教師指南</div>
+    <div class="d">在課堂中運用 topRacer 與 Claude 的教學說明。</div>
+  </a>
+
+  <footer>
+    安裝檔(macOS .dmg / Windows .exe)請見
+    <a href="https://github.com/itemhsu/topRacer-releases">GitHub releases repo</a>。原始碼為私有。
+  </footer>
+</body>
+</html>
